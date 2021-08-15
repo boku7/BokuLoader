@@ -9,8 +9,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Figure out how to implement inline assembly into a C project.
 
 ## Future Project Goals
-+ Use the initial project as a template for more advanced evasion techniques leveraging the evasion flexibility of Assembly.
-+ Implement the Cobalt Strike options such as no RWX, stompPE, module stomping, changing the MZ header, etc.
++ Use the initial project as a template for more advanced evasion techniques leveraging the flexibility of Assembly.
++ Implement Cobalt Strike options such as no RWX, stompPE, module stomping, changing the MZ header, etc.
 + Write a decent Aggressor script.
 + Have different versions of reflective loader to choose from.
 + Implement HellsGate/HalosGate for the initial calls that reflective loader uses (pNtFlushInstructionCache, VirtualAlloc, GetProcAddress, LoadLibraryA, etc).
