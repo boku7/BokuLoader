@@ -1,9 +1,21 @@
-# CobaltStrikeReflectiveLoader
-Cobalt Strike User-Defined Reflective Loader written in Assembly &amp; C for advanced evasion capabilities.
+# Cobalt Strike User-Defined Reflective Loader
+Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
+## Initial Project Goals
++ Cross compile the User-Defined Reflective Loader Cobalt Strike provides with mingw-gcc from macOS/Linux instead of with Windows.
++ Write inline assembly into the project.
++ Have the reflective loader be compatible with Cobalt Strike via the API functionality and kit provided in the new update.
++ Learn how reflective loader works.
++ Write my own reflective loader in assembly.
 
-
-
+## Future Project Goals
++ Use the initial project as a template for more advanced evasion techniques leveraging the evasion flexibility of Assembly.
++ Implement the Cobalt Strike options such as no RWX, stompPE, module stomping, changing the MZ header, etc.
++ Write a decent Aggressor script.
++ Have different versions of reflective loader to choose from.
++ Implement HellsGate/HalosGate for the initial calls that reflective loader uses (NtFlushCache,VirtualAlloc,GetProcAddress,LoadLibraryA,etc)
++ Optimize the assembly code.
++ Some kind of template language overlay that can modify/randomize the registers/methods.
 
 ## Credits / References
 ### Reflective Loader
