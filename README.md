@@ -4,8 +4,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ## Initial Project Goals
 + Learn how reflective loader works.
 + Write my own reflective loader in assembly.
-+ Have the reflective loader be compatible with Cobalt Strike.
-+ Cross compile the Windows User-Defined Reflective Loader Cobalt Strike provides with GCC from macOS/Linux.
++ Compatible with Cobalt Strike.
++ Cross compile from macOS/Linux.
 + Figure out how to implement inline assembly into a C project.
 
 ## Future Project Goals
