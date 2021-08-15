@@ -26,3 +26,4 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ### Implementing ASM in C Code with GCC
 + https://outflank.nl/blog/2020/12/26/direct-syscalls-in-beacon-object-files/
 + https://www.cs.uaf.edu/2011/fall/cs301/lecture/10_12_asm_c.html
++ http://gcc.gnu.org/onlinedocs/gcc-4.0.2/gcc/Extended-Asm.html#Extended-Asm
