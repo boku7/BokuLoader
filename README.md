@@ -2,11 +2,11 @@
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
 ## Initial Project Goals
-+ Cross compile the Windows User-Defined Reflective Loader Cobalt Strike provides with mingw-gcc from macOS/Linux.
-+ Figure out how to implement inline assembly into a C project.
-+ Have the reflective loader be compatible with Cobalt Strike via the API functionality and kit provided in the new update.
 + Learn how reflective loader works.
 + Write my own reflective loader in assembly.
++ Have the reflective loader be compatible with Cobalt Strike.
++ Cross compile the Windows User-Defined Reflective Loader Cobalt Strike provides with GCC from macOS/Linux.
++ Figure out how to implement inline assembly into a C project.
 
 ## Future Project Goals
 + Use the initial project as a template for more advanced evasion techniques leveraging the evasion flexibility of Assembly.
