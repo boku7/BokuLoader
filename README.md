@@ -13,7 +13,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Implement the Cobalt Strike options such as no RWX, stompPE, module stomping, changing the MZ header, etc.
 + Write a decent Aggressor script.
 + Have different versions of reflective loader to choose from.
-+ Implement HellsGate/HalosGate for the initial calls that reflective loader uses (NtFlushCache,VirtualAlloc,GetProcAddress,LoadLibraryA,etc)
++ Implement HellsGate/HalosGate for the initial calls that reflective loader uses (pNtFlushInstructionCache, VirtualAlloc, GetProcAddress, LoadLibraryA, etc).
 + Optimize the assembly code.
 + Some kind of template language overlay that can modify/randomize the registers/methods.
 
