@@ -92,8 +92,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[ntdllExAddrTable] "=r" (ntdllExAddrTable)
 		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
 		 [ntdllAddr] "r" (ntdllAddr)
-		);
-
+	);
 	__asm__(
 		"mov rcx, %[ntdllExportDirectory] \n"
 		"mov rdx, %[ntdllAddr] \n"
@@ -106,7 +105,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
 		 [ntdllAddr] "r" (ntdllAddr)
 	);
-
 	__asm__(
 		"mov rcx, %[ntdllExportDirectory] \n"
 		"mov rdx, %[ntdllAddr] \n"
@@ -119,7 +117,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
 		 [ntdllAddr] "r" (ntdllAddr)
 	);
-
 	// NTDLL.NtFlushInstructionCache
 	// On Load:
 	// RAX = DWORD apiNameStringLen
@@ -215,7 +212,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[kernel32ExAddrTable] "=r" (kernel32ExAddrTable)
 		:[kernel32ExportDirectory] "r" (kernel32ExportDirectory),
 		 [kernel32Addr] "r" (kernel32Addr)
-		);
+	);
 
 	__asm__(
 		"mov rcx, %[kernel32ExportDirectory] \n"
@@ -533,7 +530,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[initRdllAddr] "r" (initRdllAddr),
 			[RVASectionPointerToRawData] "r" (RVASectionPointerToRawData)
 		);	
-
 		// STEP 3.3 | Get the size of the section
 		// ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->SizeOfRawData = DWORD [RdllNthSectionAddr+0x10]
 		// SizeOfSection = ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->SizeOfRawData
@@ -546,7 +542,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[SizeOfSection] "=r" (SizeOfSection)
 			:[RdllNthSectionAddr] "r" (RdllNthSectionAddr)
 		);
-
 		// STEP 3.4 | Copy the section from the source address to the destination for the size of the section
 		//while( SizeOfSection-- )
 		//	*(BYTE *)newRdllSectionVirtualAddress++ = *(BYTE *)InitRdllSectionVirtualAddress++;
@@ -569,7 +564,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			[InitRdllSectionVirtualAddress] "r" (InitRdllSectionVirtualAddress),
 			[newRdllSectionVirtualAddress] "r" (newRdllSectionVirtualAddress)
 		);
-
 		// STEP 3.5 | Get the address of the next section header and loop until there are no more sections
 		//RdllNthSectionAddr += sizeof( IMAGE_SECTION_HEADER );
 		__asm__(
@@ -586,7 +580,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// STEP 4.1 | Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
 	// rdllDataDirImportDirectoryAddr = (PVOID)&((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_IMPORT ];
 	PVOID rdllDataDirImportDirectoryAddr;
-		__asm__(
+	__asm__(
 		"mov rax, %[OptionalHeaderAddr] \n"
 		"xor rbx, rbx \n"
 		"mov rbx, 0x78 \n"
@@ -602,7 +596,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 //     } IMAGE_DATA_DIRECTORY,*PIMAGE_DATA_DIRECTORY;
 	//  rdllImportDirectoryAddr = newRdllAddr + ((PIMAGE_DATA_DIRECTORY)rdllDataDirImportDirectoryAddr)->VirtualAddress 
 	PVOID rdllImportDirectoryAddr;
-		__asm__(
+	__asm__(
 		"mov rax, %[rdllDataDirImportDirectoryAddr] \n"
 		"mov rdx, %[newRdllAddr] \n"
 		"xor rbx, rbx \n"
