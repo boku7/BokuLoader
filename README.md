@@ -20,6 +20,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Have different versions of reflective loader to choose from.
 + Implement HellsGate/HalosGate for the initial calls that reflective loader uses (pNtFlushInstructionCache, VirtualAlloc, GetProcAddress, LoadLibraryA, etc).
 + Optimize the assembly code.
++ Hash/obfuscate strings.
 + Some kind of template language overlay that can modify/randomize the registers/methods.
 
 ## How to Use
