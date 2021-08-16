@@ -55,7 +55,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// get &ntdll.dll
 	__asm__(
 		"xor rdi, rdi \n"            // RDI = 0x0
-	    "mul rdi \n"                 // RAX&RDX =0x0
+		"mul rdi \n"                 // RAX&RDX =0x0
 		"mov rbx, gs:[rax+0x60] \n"   // RBX = Address_of_PEB
 		"mov rbx, [rbx+0x18] \n"      // RBX = Address_of_LDR
 		"mov rbx, [rbx+0x20] \n"
@@ -66,18 +66,18 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	);
 	// find the Export Directory for NTDLL
 	__asm__(
-	   "mov rcx, %[ntdllAddr] \n"
-	   "mov rbx, rcx \n"
-       "mov r8, rcx \n"
-       "mov ebx, [rbx+0x3C] \n"
-       "add rbx, r8 \n"
-       "xor rcx, rcx \n"
-       "add cx, 0x88 \n"
-       "mov edx, [rbx+rcx] \n"
-       "add rdx, r8 \n"
- 	   "mov %[ntdllExportDirectory], rdx \n"
-	   :[ntdllExportDirectory] "=r" (ntdllExportDirectory)
-	   :[ntdllAddr] "r" (ntdllAddr)
+		"mov rcx, %[ntdllAddr] \n"
+	   	"mov rbx, rcx \n"
+       		"mov r8, rcx \n"
+       		"mov ebx, [rbx+0x3C] \n"
+       		"add rbx, r8 \n"
+       		"xor rcx, rcx \n"
+       		"add cx, 0x88 \n"
+       		"mov edx, [rbx+rcx] \n"
+       		"add rdx, r8 \n"
+ 	   	"mov %[ntdllExportDirectory], rdx \n"
+	   	:[ntdllExportDirectory] "=r" (ntdllExportDirectory)
+	   	:[ntdllAddr] "r" (ntdllAddr)
 	);
 
 	// RCX = &NTDLL.ExportDirectory | RDX = &NTDLL.DLL
@@ -174,7 +174,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// get &kernel32.dll
 	__asm__(
 		"xor rdi, rdi \n"              // RDI = 0x0
-	    "mul rdi \n"                   // RAX&RDX =0x0
+	 	"mul rdi \n"                   // RAX&RDX =0x0
 		"mov rbx, gs:[rax+0x60] \n"    // RBX = Address_of_PEB
 		"mov rbx, [rbx+0x18] \n"       // RBX = Address_of_LDR
 		"mov rbx, [rbx+0x20] \n"       // RBX = 1st entry in InitOrderModuleList / ntdll.dll
@@ -187,19 +187,19 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 
 	// get &kernel32.ExportDirectory
 	__asm__(
-	   "mov rcx, %[kernel32Addr] \n"
-	   "mov rbx, rcx \n"
-       "mov r8, rcx \n"
-       "mov ebx, [rbx+0x3C] \n"
-       "add rbx, r8 \n"
-       "xor rcx, rcx \n"
-       "add cx, 0x88ff \n"
-       "shr rcx, 0x8 \n"
-       "mov edx, [rbx+rcx] \n"
-       "add rdx, r8 \n"
- 	   "mov %[kernel32ExportDirectory], rdx \n"
-	   :[kernel32ExportDirectory] "=r" (kernel32ExportDirectory)
-	   :[kernel32Addr] "r" (kernel32Addr)
+		"mov rcx, %[kernel32Addr] \n"
+		"mov rbx, rcx \n"
+       		"mov r8, rcx \n"
+       		"mov ebx, [rbx+0x3C] \n"
+       		"add rbx, r8 \n"
+      		"xor rcx, rcx \n"
+     		"add cx, 0x88ff \n"
+     		"shr rcx, 0x8 \n"
+   		"mov edx, [rbx+rcx] \n"
+  	     	"add rdx, r8 \n"
+ 	   	"mov %[kernel32ExportDirectory], rdx \n"
+	   	:[kernel32ExportDirectory] "=r" (kernel32ExportDirectory)
+	   	:[kernel32Addr] "r" (kernel32Addr)
 	);
 
 	// get Kernel32 Export Address Table
@@ -1242,28 +1242,28 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[nextRelocBlockEntryAddress] "r" (nextRelocBlockEntryAddress),
 					[relocVirtualAddress] "r" (relocVirtualAddress),
 					[BaseAddressDelta] "r" (BaseAddressDelta)
-                 );
+               			);
 				// get the next entry in the current relocation block
 				// nextRelocBlockEntry += sizeof( IMAGE_RELOC );
 				__asm__(
-                     "mov r12, %[inNextRelocBlockEntryAddress] \n"
-                     "add r12, 0x2 \n"
-                     "mov %[outNextRelocBlockEntryAddress], r12 \n"
-                     :[outNextRelocBlockEntryAddress] "=r" (nextRelocBlockEntryAddress)
-                     :[inNextRelocBlockEntryAddress] "r" (nextRelocBlockEntryAddress)
-                 );
+                     			"mov r12, %[inNextRelocBlockEntryAddress] \n"
+                     			"add r12, 0x2 \n"
+                     			"mov %[outNextRelocBlockEntryAddress], r12 \n"
+                     			:[outNextRelocBlockEntryAddress] "=r" (nextRelocBlockEntryAddress)
+                     			:[inNextRelocBlockEntryAddress] "r" (nextRelocBlockEntryAddress)
+                 		);
 			}
 
 			// get the next entry in the relocation directory
 			// nextRelocationBlock = nextRelocationBlock + relocSizeOfBlock;
 			__asm__(
-                 "mov rax, %[inNextRelocationBlock] \n"
-                 "mov r11, %[relocSizeOfBlock] \n"
-                 "add r11, rax \n"
-                 "mov %[outNextRelocationBlock], r11 \n"
-                 :[outNextRelocationBlock] "=r" (nextRelocationBlock)
-                 :[inNextRelocationBlock] "r" (nextRelocationBlock),
-                  [relocSizeOfBlock] "r" (relocSizeOfBlock)
+                 		"mov rax, %[inNextRelocationBlock] \n"
+                		"mov r11, %[relocSizeOfBlock] \n"
+                		"add r11, rax \n"
+              			"mov %[outNextRelocationBlock], r11 \n"
+             			:[outNextRelocationBlock] "=r" (nextRelocationBlock)
+             			:[inNextRelocationBlock] "r" (nextRelocationBlock),
+                  		[relocSizeOfBlock] "r" (relocSizeOfBlock)
              );
 			// relocSizeOfBlock = SizeOf(nextRelocationBlock)
 			__asm__(
