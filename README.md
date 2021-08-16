@@ -3,11 +3,12 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 + This is based on Stephan Fewers incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
-+ I created this while working through Renz0h's Reflective DLL videos from the Sektor7 Malware Developer Intermediate Course. 100% recommend these videos if you're interested in Reflective DLL:
-  + [Dancing with Import Address Table (IAT) - Sektor 7 RED TEAM Operator: Malware Development Intermediate Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435207-dancing-with-iat)
-  + [Walking through Export Address Table - Sektor 7 RED TEAM Operator: Malware Development Intermediate Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435189-walking-through-export-address-table)
-  + [Reflective Injection Explained - Sektor 7 RED TEAM Operator: Malware Development Intermediate Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435355-reflective-injection-explained)
-  + [ReflectiveLoader source review - Sektor 7 RED TEAM Operator: Malware Development Intermediate Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435383-reflectiveloader-source-review)
++ I created this while working through Renz0h's Reflective DLL videos from the Sektor7 Malware Developer Intermediate (MDI) Course.
++  100% recommend these videos if you're interested in Reflective DLL:
+  + [Dancing with Import Address Table (IAT) - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435207-dancing-with-iat)
+  + [Walking through Export Address Table - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435189-walking-through-export-address-table)
+  + [Reflective Injection Explained - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435355-reflective-injection-explained)
+  + [ReflectiveLoader source review - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435383-reflectiveloader-source-review)
 
 ## Initial Project Goals
 + Learn how reflective loader works.
