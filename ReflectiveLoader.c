@@ -933,7 +933,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importAddressTableEntry] "r" (importAddressTableEntry),  // RAX = The import table entry we are going to overwrite
 					 [importEntryAddressRVA] "r" (importEntryAddressRVA),  // RDX = 00007FFA56740000 &ws2_32.dll
 					 [ImportedDllAddr] "r" (ImportedDllAddr) // RCX = ws2_32.00007FFA5678E500
-                 );
+              			);
 			}
 			else
 			{
@@ -987,18 +987,18 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					: // no outputs
 					:[importAddressTableEntry] "r" (importAddressTableEntry),  // RAX = The import table entry we are going to overwrite
 					 [importEntryAddress] "r" (importEntryAddress) 
-                 );
+                 		);
 			}
 			// get the next imported function
 			importAddressTableEntry += 0x8;
 			if( importLookupTableEntry )
 				importLookupTableEntry += 0x8;
 			__asm__(
-			"mov rax, %[importAddressTableEntry] \n" 
-			"mov rax, [rax] \n"
-			"mov %[checkNullImportAddressTableEntry], rax \n" 
-			:[checkNullImportAddressTableEntry] "=r" (checkNullImportAddressTableEntry)
-			:[importAddressTableEntry] "r" (importAddressTableEntry)
+				"mov rax, %[importAddressTableEntry] \n" 
+				"mov rax, [rax] \n"
+				"mov %[checkNullImportAddressTableEntry], rax \n" 
+				:[checkNullImportAddressTableEntry] "=r" (checkNullImportAddressTableEntry)
+				:[importAddressTableEntry] "r" (importAddressTableEntry)
 			);
 		}
 
@@ -1264,7 +1264,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
              			:[outNextRelocationBlock] "=r" (nextRelocationBlock)
              			:[inNextRelocationBlock] "r" (nextRelocationBlock),
                   		[relocSizeOfBlock] "r" (relocSizeOfBlock)
-             );
+             		);
 			// relocSizeOfBlock = SizeOf(nextRelocationBlock)
 			__asm__(
 				"mov rax, %[nextRelocationBlock] \n"
