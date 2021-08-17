@@ -28,6 +28,20 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
+```bash
+# Creating a Team Server Cobalt Strike profile with SourcePoint
+## Clone the SourcePoint project
+git clone https://github.com/Tylous/SourcePoint.git
+## Build SourcePoint Go project
+cd SourcePoint
+go build SourcePoint.go
+## Run it with some cool flags (look at the help menu for more info)
+### This is the settings I have tested UD Reflective Loader with
+./SourcePoint -PE_Clone 18 -PostEX_Name 13 -Sleep 3 -Profile 4 -Outfile myprofile.profile -Host <TeamServer> -Injector NtMapViewOfSection
+## Start Team Server
+cd ../
+sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profile
+```
 2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
 ![](/images/loadRdllScriptMenu.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
