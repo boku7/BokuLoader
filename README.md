@@ -31,7 +31,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
 ![](/images/loadScript.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
-![](/images/CreateBeacon.png)
+![](/images/CreateBeaconStageless.png)
 
 ## Build (Only tested from macOS at the moment)
 1. Install mingw/gcc
