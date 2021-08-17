@@ -6,11 +6,11 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
 ## Initial Project Goals
-+ Learn how reflective loader works.
-+ Write my own reflective loader in assembly.
++ Learn how Reflective Loader works.
++ Write a Reflective Loader in Assembly.
 + Compatible with Cobalt Strike.
 + Cross compile from macOS/Linux.
-+ Figure out how to implement inline assembly into a C project.
++ Implement Inline-Assembly into a C project.
 
 ## Future Project Goals
 + Use the initial project as a template for more advanced evasion techniques leveraging the flexibility of Assembly.
@@ -23,16 +23,21 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Hash/obfuscate strings.
 + Some kind of template language overlay that can modify/randomize the registers/methods.
 
-## How to Use
+## Usage
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
 3. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
 4. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
 
-## How to Build (Only tested from macOS at the moment)
+## Build (Only tested from macOS at the moment)
 1. Install mingw/gcc
 2. Run the compile-x64.sh shell script
-3. Follow instructions above (How to Use)
+```bash
+bobby.cooke$ cat compile-x64.sh
+x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
+bobby.cooke$ bash compile-x64.sh
+```
+4. Follow "Usage" instructions
 
 ## Credits / References
 ### Reflective Loader
