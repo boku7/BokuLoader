@@ -1,5 +1,5 @@
 // Author: Bobby Cooke (@0xBoku) // SpiderLabs // github.com/boku7 // https://www.linkedin.com/in/bobby-cooke/ // https://0xboku.com
-// Credits: Stephan Fewer (@stephenfewer) & SEKTOR7 Crew (@SEKTOR7net) https://institute.sektor7.net/
+// Credits: Stephen Fewer (@stephenfewer) & SEKTOR7 Crew (@SEKTOR7net) https://institute.sektor7.net/
 #include <windows.h>
 
 typedef BOOL    (WINAPI * DLLMAIN)( HINSTANCE, DWORD, LPVOID );
