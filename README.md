@@ -7,6 +7,13 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
+## Versions
++ Different version of this User-Defined Reflective Loader project can be found in the versions folder
+| Version | File | Description |
+|:-------:|:-----|:------------|
+|0.1|/versions/ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. The project was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
+
+
 ## Initial Project Goals
 + Learn how Reflective Loader works.
 + Write a Reflective Loader in Assembly.
