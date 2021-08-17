@@ -1,9 +1,9 @@
 # Cobalt Strike User-Defined Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
-+ This is based on Stephen Fewer's incredible Reflective Loader project: 
++ Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
-+ I created this while working through Renz0h's Reflective DLL videos from the Sektor7 Malware Developer Intermediate (MDI) Course.  
++ Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
 ## Initial Project Goals
 + Learn how reflective loader works.
