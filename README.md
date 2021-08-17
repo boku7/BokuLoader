@@ -28,9 +28,10 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
-3. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
+2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
 ![](/images/loadScript.png)
-5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+![](/images/CreateBeacon.png)
 
 ## Build (Only tested from macOS at the moment)
 1. Install mingw/gcc
@@ -40,7 +41,7 @@ bobby.cooke$ cat compile-x64.sh
 x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
 bobby.cooke$ bash compile-x64.sh
 ```
-4. Follow "Usage" instructions
+3. Follow "Usage" instructions
 
 ## Credits / References
 ### Reflective Loader
