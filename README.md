@@ -1,6 +1,8 @@
 # Cobalt Strike User-Defined Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
+![](/images/bobsBeacon.png)
+
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
@@ -27,7 +29,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
 3. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
-4. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+![](/images/loadScript.png)
+5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
 
 ## Build (Only tested from macOS at the moment)
 1. Install mingw/gcc
