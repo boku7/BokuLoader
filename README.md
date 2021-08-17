@@ -50,8 +50,7 @@ sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profi
 ![](/images/CreateBeaconStageless.png)
 
 ## Build (Only tested from macOS at the moment)
-1. Install mingw/gcc
-2. Run the compile-x64.sh shell script after installling required dependencies
+1. Run the compile-x64.sh shell script after installling required dependencies
 ```bash
 # Install brew on macOS if you need it (https://brew.sh/)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
@@ -65,7 +64,7 @@ cat compile-x64.sh
 x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
 bash compile-x64.sh
 ```
-3. Follow "Usage" instructions
+2. Follow "Usage" instructions
 
 ## Credits / References
 ### Reflective Loader
