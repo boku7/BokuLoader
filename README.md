@@ -29,7 +29,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
 2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
-![](/images/loadScript.png)
+![](/images/loadRdllScript.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
 ![](/images/CreateBeaconStageless.png)
 
