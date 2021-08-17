@@ -53,7 +53,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// STEP 0: calculate our images current base address
 	// get &ntdll.dll
 	__asm__(
-		"int3 \n"
+	//	"int3 \n"
 		"xor rdi, rdi \n"            // RDI = 0x0
 		"mul rdi \n"                 // RAX&RDX =0x0
 		"mov rbx, gs:[rax+0x60] \n"   // RBX = Address_of_PEB
