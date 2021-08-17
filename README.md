@@ -48,6 +48,7 @@ sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profi
 2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
 ![](/images/loadRdllScriptMenu.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+  + Does not support x86 option. The x86 bin is the original Reflective Loader object file. 
 ![](/images/CreateBeaconStageless.png)
 
 ## Build (Only tested from macOS at the moment)
