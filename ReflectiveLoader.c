@@ -2,7 +2,6 @@
 // Credits: Stephan Fewer (@stephenfewer) & SEKTOR7 Crew (@SEKTOR7net) https://institute.sektor7.net/
 #include <windows.h>
 
-extern HINSTANCE hAppInstance;
 typedef BOOL    (WINAPI * DLLMAIN)( HINSTANCE, DWORD, LPVOID );
 typedef HMODULE (WINAPI * tLoadLibraryA)(LPCSTR lpLibFileName);
 typedef FARPROC (WINAPI * tGetProcAddress) (HMODULE hModule, LPCSTR lpProcName);
@@ -54,6 +53,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// STEP 0: calculate our images current base address
 	// get &ntdll.dll
 	__asm__(
+		"int3 \n"
 		"xor rdi, rdi \n"            // RDI = 0x0
 		"mul rdi \n"                 // RAX&RDX =0x0
 		"mov rbx, gs:[rax+0x60] \n"   // RBX = Address_of_PEB
@@ -1313,8 +1313,6 @@ BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD dwReason, LPVOID lpReserved )
 	switch( dwReason ) 
     { 
 		case DLL_PROCESS_ATTACH:
-			hAppInstance = hinstDLL;
-			MessageBoxA( NULL, "Hello from Bobby Cooke!", "Reflective Dll Injection", MB_OK );
 			break;
 		case DLL_PROCESS_DETACH:
 		case DLL_THREAD_ATTACH:
