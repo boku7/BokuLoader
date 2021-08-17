@@ -50,6 +50,9 @@ sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profi
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
   + Does not support x86 option. The x86 bin is the original Reflective Loader object file. 
 ![](/images/CreateBeaconStageless.png)
+4. Use the Script Console to make sure that the beacon created successfully with this User-Defined Reflective Loader
+  + If successful, the output in the Script Console will look like this:
+![](/images/beaconCreateSuccess.png)
 
 ## Build (Only tested from macOS at the moment)
 1. Run the compile-x64.sh shell script after installling required dependencies
