@@ -96,3 +96,5 @@ bash compile-x64.sh
 + https://outflank.nl/blog/2020/12/26/direct-syscalls-in-beacon-object-files/
 + https://www.cs.uaf.edu/2011/fall/cs301/lecture/10_12_asm_c.html
 + http://gcc.gnu.org/onlinedocs/gcc-4.0.2/gcc/Extended-Asm.html#Extended-Asm
+### Cobalt Strike C2 Profile Generator
++ [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
