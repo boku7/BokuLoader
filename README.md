@@ -51,11 +51,19 @@ sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profi
 
 ## Build (Only tested from macOS at the moment)
 1. Install mingw/gcc
-2. Run the compile-x64.sh shell script
+2. Run the compile-x64.sh shell script after installling required dependencies
 ```bash
-bobby.cooke$ cat compile-x64.sh
+# Install brew on macOS if you need it (https://brew.sh/)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Install Ming using Brew
+brew install mingw-w64
+# Clone this Reflective DLL project from this github repo
+git clone https://github.com/boku7/CobaltStrikeReflectiveLoader.git
+# Compile the ReflectiveLoader Object file
+cd CobaltStrikeReflectiveLoader/
+cat compile-x64.sh
 x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
-bobby.cooke$ bash compile-x64.sh
+bash compile-x64.sh
 ```
 3. Follow "Usage" instructions
 
