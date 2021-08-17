@@ -9,9 +9,11 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 ## Versions
 + Different version of this User-Defined Reflective Loader project can be found in the versions folder
+
+
 | Version | File | Description |
 |:-------:|:-----|:------------|
-|0.1|/versions/ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. The project was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
+|0.1|/versions/ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
 
 
 ## Initial Project Goals
