@@ -29,6 +29,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 1. Start your Cobalt Strike Team Server with or without a profile
   + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
 ```bash
+#### This profile stuff below is optional, but this is the profile I tested this Reflective Loader with ####
 # Install Go on Kali if you need it
 sudo apt install golang-go -y
 # Creating a Team Server Cobalt Strike profile with SourcePoint
