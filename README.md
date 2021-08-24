@@ -14,7 +14,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 | Version | File | Description |
 |:-------:|:-----|:------------|
 |0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
-
+|0.2|ReflectiveLoader-v0_2.c| Checks the Loader to see if dependent DLL's already exist to limit times LoadLibrary() is called, custom GetSymbolAddress function to reduce calls to GetProcAddress(), and code refactor. |
 
 ## Initial Project Goals
 + Learn how Reflective Loader works.
