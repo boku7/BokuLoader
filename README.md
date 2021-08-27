@@ -95,6 +95,11 @@ bash compile-x64.sh
 + https://www.cobaltstrike.com/help-user-defined-reflective-loader
 ### Great Resource for learning Intel ASM
 + [Pentester Academy - SLAE64](https://www.pentesteracademy.com/course?id=7)
+### ETW and AMSI Bypass 
++ @mariuszbit - for awesome idea to implement bypasses in reflective loader!
++ [@_XPN_ Hiding Your .NET – ETW](https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/)
++ [ajpc500/BOFs](https://github.com/ajpc500/BOFs/)
++ [Offensive Security OSEP](https://www.offensive-security.com/pen300-osep/)
 ### Implementing ASM in C Code with GCC
 + https://outflank.nl/blog/2020/12/26/direct-syscalls-in-beacon-object-files/
 + https://www.cs.uaf.edu/2011/fall/cs301/lecture/10_12_asm_c.html
