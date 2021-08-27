@@ -50,9 +50,9 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
 	//   - This is done by matching the first 4 unicode charaters of the DLL BaseName
 	char ntdlStr[] = "ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
-	__asm__(
-		"int3 \n"
-	);
+	//__asm__(
+	//	"int3 \n"
+	//);
 	ntdllAddr = (PVOID)crawlLdrDllList((PVOID)ntdlStr);
 	ntdllExportDirectory = getExportDirectory(ntdllAddr);
 	ntdllExAddrTable = getExportAddressTable(ntdllAddr, ntdllExportDirectory);
