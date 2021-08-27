@@ -13,6 +13,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
+|0.4|ReflectiveLoader-v0_4.c| AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @_xpn_ + @offsectraining + @ajpc500 for their research and code |
+|0.3.1|ReflectiveLoader-v0_3_1.c| Changed strings from wchar to char and unpack them to unicode with MMX registers. Fixes linux compilation error discovered by @mariuszbit |
 |0.3|ReflectiveLoader-v0_3.c| String obfuscation using new technique. |
 |0.2|ReflectiveLoader-v0_2.c| Checks the Loader to see if dependent DLL's already exist to limit times LoadLibrary() is called, custom GetSymbolAddress function to reduce calls to GetProcAddress(), and code refactor. |
 |0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
