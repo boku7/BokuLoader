@@ -49,8 +49,11 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 
 	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
 	//   - This is done by matching the first 4 unicode charaters of the DLL BaseName
-	wchar_t ntdlStr[] = L"ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
-	ntdllAddr = (PVOID)crawlLdrDllList(ntdlStr);
+	char ntdlStr[] = "ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
+	__asm__(
+		"int3 \n"
+	);
+	ntdllAddr = (PVOID)crawlLdrDllList((PVOID)ntdlStr);
 	ntdllExportDirectory = getExportDirectory(ntdllAddr);
 	ntdllExAddrTable = getExportAddressTable(ntdllAddr, ntdllExportDirectory);
 	ntdllExNamePointerTable = getExportNameTable(ntdllAddr, ntdllExportDirectory);
@@ -75,8 +78,8 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	);
 	pNtFlushInstructionCache = getSymbolAddress(ntFlushStr, ntFlushStrLen, ntdllAddr, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable);
 
-	wchar_t kernstr[] = L"KERN"; // L"KERNEL32.DLL" - Debugging shows that kernel32 loads in with all uppercase. May need to check for both in future 
-	kernel32Addr = (PVOID)crawlLdrDllList(kernstr);
+	char kernstr[] = "KERN"; // L"KERNEL32.DLL" - Debugging shows that kernel32 loads in with all uppercase. May need to check for both in future 
+	kernel32Addr = (PVOID)crawlLdrDllList((PVOID)kernstr);
 	kernel32ExportDirectory = getExportDirectory(kernel32Addr);
 	kernel32ExAddrTable = getExportAddressTable(kernel32Addr, kernel32ExportDirectory);
 	kernel32ExNamePointerTable = getExportNameTable(kernel32Addr, kernel32ExportDirectory);
