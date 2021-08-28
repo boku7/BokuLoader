@@ -98,7 +98,6 @@ bash compile-x64.sh
   + Best classes for malware development out there.
   + Creator of the halos gate technique. His work was the motivation for this work.
   + [Sektor7 HalosGate Blog](https://blog.sektor7.net/#!res/2021/halosgate.md)
-  + [Sektor7 Institute - The Best Place for Learning Malware](https://institute.sektor7.net/)
 ### HellsGate Syscaller
 + @smelly__vx & @am0nsec ( Creators/Publishers of the Hells Gate technique )
   + Could not have made my implementation of HellsGate without them :)
