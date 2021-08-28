@@ -13,7 +13,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
-|0.5|ReflectiveLoader-v0_5.c| Added HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! Credit to @AustinNeely for recommending removing ASM Stubs! Haven't got all of them, but will keep working at it :) |
+|0.5|ReflectiveLoader-v0_5.c| Added HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! Credit to @ilove2pwn_ for recommending removing ASM Stubs! Haven't got all of them, but will keep working at it :) |
 |0.4|ReflectiveLoader-v0_4.c| AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @_xpn_ + @offsectraining + @ajpc500 for their research and code |
 |0.3.1|ReflectiveLoader-v0_3_1.c| Changed strings from wchar to char and unpack them to unicode with MMX registers. Fixes linux compilation error discovered by @mariuszbit |
 |0.3|ReflectiveLoader-v0_3.c| String obfuscation using new technique. |
