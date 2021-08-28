@@ -92,6 +92,19 @@ bash compile-x64.sh
   + [Walking through Export Address Table - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435189-walking-through-export-address-table)
   + [Reflective Injection Explained - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435355-reflective-injection-explained)
   + [ReflectiveLoader source review - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435383-reflectiveloader-source-review)
+### HalosGate SysCaller
++ Reenz0h from @SEKTOR7net
+  + Most of the C techniques I use are from Reenz0h's awesome courses and blogs 
+  + Best classes for malware development out there.
+  + Creator of the halos gate technique. His work was the motivation for this work.
+  + https://blog.sektor7.net/#!res/2021/halosgate.md 
+  + https://institute.sektor7.net/
+### HellsGate Syscaller
++ @smelly__vx & @am0nsec ( Creators/Publishers of the Hells Gate technique )
+  + Could not have made my implementation of HellsGate without them :)
+  + Awesome work on this method, really enjoyed working through it myself. Thank you!
+  + https://github.com/am0nsec/HellsGate 
+  + Link to the Hell's Gate paper: https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf
 ### Cobalt Strike User Defined Reflective Loader
 + https://www.cobaltstrike.com/help-user-defined-reflective-loader
 ### Great Resource for learning Intel ASM
