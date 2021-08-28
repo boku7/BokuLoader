@@ -58,13 +58,13 @@ go build SourcePoint.go
 cd ../
 sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profile
 ```
-2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script
+2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script.   
 ![](/images/loadRdllScriptMenu.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
-  + Does not support x86 option. The x86 bin is the original Reflective Loader object file. 
+  + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
 ![](/images/CreateBeaconStageless.png)
 4. Use the Script Console to make sure that the beacon created successfully with this User-Defined Reflective Loader
-  + If successful, the output in the Script Console will look like this:
+  + If successful, the output in the Script Console will look like this:  
 ![](/images/beaconCreateSuccess.png)
 
 ## Build (Only tested from macOS at the moment)
@@ -97,14 +97,14 @@ bash compile-x64.sh
   + Most of the C techniques I use are from Reenz0h's awesome courses and blogs 
   + Best classes for malware development out there.
   + Creator of the halos gate technique. His work was the motivation for this work.
-  + https://blog.sektor7.net/#!res/2021/halosgate.md 
-  + https://institute.sektor7.net/
+  + [Sektor7 HalosGate Blog](https://blog.sektor7.net/#!res/2021/halosgate.md)
+  + [Sektor7 Institute - The Best Place for Learning Malware](https://institute.sektor7.net/)
 ### HellsGate Syscaller
 + @smelly__vx & @am0nsec ( Creators/Publishers of the Hells Gate technique )
   + Could not have made my implementation of HellsGate without them :)
   + Awesome work on this method, really enjoyed working through it myself. Thank you!
   + https://github.com/am0nsec/HellsGate 
-  + Link to the Hell's Gate paper: https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf
+  + Link to the [Hell's Gate paper: https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf](https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf)
 ### Cobalt Strike User Defined Reflective Loader
 + https://www.cobaltstrike.com/help-user-defined-reflective-loader
 ### Great Resource for learning Intel ASM
