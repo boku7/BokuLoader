@@ -7,9 +7,13 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
+## Latest Update! (08/29/21)
++ NoRWX feature added! The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions.    
+![](/images/noRWX.png)
+
+
 ## Versions
 + Different version of this User-Defined Reflective Loader project can be found in the versions folder
-
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
