@@ -31,11 +31,23 @@ sub generate_my_dll {
 	# ---------------------------------------------------------------------
 	return $temp_dll;
 }
+
+# ------------------------------------
+# $1 = DLL file name
+# $2 = arch
+# ------------------------------------
+set BEACON_RDLL_SIZE {
+   warn("Running 'BEACON_RDLL_SIZE' for DLL " . $1 . " with architecture " . $3);
+   return "100";
+}
+
 # ------------------------------------
 # $1 = DLL file name
 # $2 = DLL content
 # $3 = arch
 # ------------------------------------
+
+
 set BEACON_RDLL_GENERATE {
 	if ($3 eq "x86") {
 		warn("x86 selected - Reverting to using default Cobalt Strike Reflective Loader.");
