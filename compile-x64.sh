@@ -1,1 +1,1 @@
-x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
+x86_64-w64-mingw32-gcc ReflectiveLoader.c -o bin/ReflectiveLoader.x64.o -Os -fno-asynchronous-unwind-tables -nostdlib -fno-ident -fpack-struct=8 -falign-functions=1 -s -ffunction-sections -falign-jumps=1 -w -falign-labels=1 -fPIC -Wl,-s,--no-seh,--enable-stdcall-fixup -I. -masm=intel
