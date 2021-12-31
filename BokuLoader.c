@@ -60,7 +60,7 @@ typedef void*  (NTAPI  * tNtFlushInstructionCache)(HANDLE, PVOID, unsigned long)
 typedef void*  (WINAPI * DLLMAIN)(HINSTANCE, unsigned long, void* );
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
 
-__declspec(dllexport) void* WINAPI bokuLoader()
+__declspec(dllexport) void* WINAPI BokuLoader()
 {
     // Get Export Directory and Export Tables for NTDLL.DLL
     char ws_ntdll[] = {'n',0,'t',0,'d',0,'l',0,'l',0,'.',0,'d',0,'l',0,'l',0,0};
