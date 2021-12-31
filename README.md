@@ -7,11 +7,6 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
-## Latest Update! (08/29/21)
-+ NoRWX feature added! The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions.    
-![](/images/noRWX.png)
-
-
 ## Versions
 + Different version of this User-Defined Reflective Loader project can be found in the versions folder
 
@@ -26,45 +21,9 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 |0.2|ReflectiveLoader-v0_2.c| Checks the Loader to see if dependent DLL's already exist to limit times LoadLibrary() is called, custom GetSymbolAddress function to reduce calls to GetProcAddress(), and code refactor. |
 |0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
 
-## Initial Project Goals
-+ Learn how Reflective Loader works.
-+ Write a Reflective Loader in Assembly.
-+ Compatible with Cobalt Strike.
-+ Cross compile from macOS/Linux.
-+ Implement Inline-Assembly into a C project.
-
-## Future Project Goals
-+ Use the initial project as a template for more advanced evasion techniques leveraging the flexibility of Assembly.
-+ Implement Cobalt Strike options such as no RWX, stompPE, module stomping, changing the MZ header, etc.
-+ Write a decent Aggressor script.
-+ Support x86.
-+ Have different versions of reflective loader to choose from.
-+ Implement HellsGate/HalosGate for the initial calls that reflective loader uses (pNtFlushInstructionCache, VirtualAlloc, GetProcAddress, LoadLibraryA, etc).
-+ Optimize the assembly code.
-+ Hash/obfuscate strings.
-+ Some kind of template language overlay that can modify/randomize the registers/methods.
-
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile
-  + At the moment I've only tested without a profile and with a few profiles generated from [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
-```bash
-#### This profile stuff below is optional, but this is the profile I tested this Reflective Loader with ####
-# Install Go on Kali if you need it
-sudo apt install golang-go -y
-# Creating a Team Server Cobalt Strike profile with SourcePoint
-## Clone the SourcePoint project
-git clone https://github.com/Tylous/SourcePoint.git
-## Build SourcePoint Go project
-cd SourcePoint
-go build SourcePoint.go
-## Run it with some cool flags (look at the help menu for more info)
-### This is the settings I have tested UD Reflective Loader with
-./SourcePoint -PE_Clone 18 -PostEX_Name 13 -Sleep 3 -Profile 4 -Outfile myprofile.profile -Host <TeamServer> -Injector NtMapViewOfSection
-## Start Team Server
-cd ../
-sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profile
-```
-2. Go to your Cobalt Strike GUI and import the rdll_loader.cna Agressor script.   
+2. Go to your Cobalt Strike GUI and import the BokuLoader.cna Agressor script.   
 ![](/images/loadRdllScriptMenu.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
   + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
@@ -81,11 +40,11 @@ sudo ./teamserver  <TeamServer> 'T3@Ms3Rv3Rp@$$w0RD' SourcePoint/myprofile.profi
 # Install Ming using Brew
 brew install mingw-w64
 # Clone this Reflective DLL project from this github repo
-git clone https://github.com/boku7/CobaltStrikeReflectiveLoader.git
-# Compile the ReflectiveLoader Object file
-cd CobaltStrikeReflectiveLoader/
+git clone https://github.com/boku7/BokuLoader.git
+# Compile the BokuLoader Object file
+cd BokuLoader/
 cat compile-x64.sh
-x86_64-w64-mingw32-gcc -c ReflectiveLoader.c -o ./bin/ReflectiveLoader.x64.o -shared -masm=intel
+x86_64-w64-mingw32-gcc -c BokuLoader.c -o BokuLoader.o -shared -masm=intel
 bash compile-x64.sh
 ```
 2. Follow "Usage" instructions
