@@ -22,7 +22,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 |0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
 
 ## Usage
-1. Start your Cobalt Strike Team Server with or without a profile
+1. Start your Cobalt Strike Team Server with or without a profile.
 2. Go to your Cobalt Strike GUI and import the BokuLoader.cna Agressor script.   
 ![](/images/loadRdllScriptMenu.png)
 3. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
