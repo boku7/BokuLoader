@@ -1,7 +1,7 @@
 # BokuLoader - Cobalt Strike Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
-![](/images/top.png)
+![](/images/top2.png)
 
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
