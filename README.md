@@ -12,6 +12,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
+|0.71|BokuLoader-v0.71.c| #NOHEADERCOPY Feature Added! Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers.|
 |0.7|BokuLoader-v0_7.c| Updated to work with Cobalt Strike v4.5! |
 |0.6|ReflectiveLoader-v0_6.c| NoRWX feature added! The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions |
 |0.5|ReflectiveLoader-v0_5.c| Added HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! Credit to @ilove2pwn_ for recommending removing ASM Stubs! Haven't got all of them, but will keep working at it :) |
