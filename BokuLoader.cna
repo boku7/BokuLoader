@@ -61,7 +61,8 @@ sub generate_my_dll {
 	# Load a object file that contains a Reflective Loader.
 	# The architecture ($3) is used in the path.
 	# ---------------------------------------------------------------------
-$handle = openf(script_resource("BokuLoader.o"));
+
+	$handle = openf(script_resource("BokuLoader.".$3.".o"));
 	$data   = readb($handle, -1);
 	closef($handle);
 
