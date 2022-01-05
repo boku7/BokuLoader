@@ -18,7 +18,6 @@ void* getOptionalHeader(void* NewExeHeader);
 void* getSizeOfOptionalHeader(void* NewExeHeader);
 void* add(void* , void* );
 void* getNumberOfSections(void* newExeHeaderAddr);
-void* getImportDirectory(void* OptionalHeader);
 void* getBeaconEntryPoint(void* newRdllAddr, void* OptionalHeaderAddr);
 
 typedef struct Export {
@@ -631,10 +630,6 @@ __asm__(
     "xor rax, rax \n"
     "mov ax, [rcx] \n"
     "ret \n" 
-"getImportDirectory: \n"
-    "add rcx, 0x78 \n"
-    "xchg rax, rcx \n"
-    "ret \n" //return ImportDirectory 
 "getBeaconEntryPoint: \n"
     "add rdx, 0x10 \n"          // OptionalHeader.AddressOfEntryPoint
     "mov eax, [rdx] \n"
