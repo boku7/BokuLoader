@@ -12,6 +12,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
+|0.81|BokuLoader-v0.81.c| HellsGate&HalosGate direct syscalls added by [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) are now an optional feature! | 
 |0.8|BokuLoader-v0.8.c|  [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) from CobaltStrike pushed a massive update: HellsGate & HalosGate syscaller, makefile, bug fixes, and more! |
 |0.71|BokuLoader-v0.71.c| #NOHEADERCOPY Feature Added! Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers.|
 |0.7|BokuLoader-v0_7.c| Updated to work with Cobalt Strike v4.5! |
