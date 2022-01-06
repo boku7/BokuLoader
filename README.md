@@ -50,6 +50,7 @@ make
 2. Follow "Usage" instructions
 
 ## Credits / References
+### [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) - Project Contributor!
 ### Reflective Loader
 + https://github.com/stephenfewer/ReflectiveDLLInjection
 + 100% recommend these videos if you're interested in Reflective DLL:  
