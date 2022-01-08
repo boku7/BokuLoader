@@ -826,32 +826,40 @@ __asm__(
     "xor eax, eax \n"
     "ret \n"
 "halosGateUp: \n"
-    "xor esi, esi \n"
-    "xor edi, edi \n"
-    "mov esi, 0xB8D18B4C \n"
-    "xor eax, eax \n"
-    "mov al, 0x20 \n"
+    "mov ecx, [esp+0x4] \n"     // ntdllApiAddr
+    "mov edx, [esp+0x8] \n"     // index
+    "mov eax, 0x20 \n"
     "mul dx \n"
     "add ecx, eax \n"
-    "mov edi, [ecx] \n"
-    "cmp esi, edi \n"
+    "mov bl, [ecx] \n"          // byte at offset 0
+    "cmp bl, 0xB8 \n"           // check it is 0xb8
+    "jne error \n"
+    "mov bl, [ecx+0x3] \n"      // byte at offset 3
+    "cmp bl, 0x0 \n"            // check it is 0x0
+    "jne error \n"
+    "mov bl, [ecx+0x4] \n"      // byte at offset 4
+    "cmp bl, 0x0 \n"            // check it is 0x0
     "jne error \n"
     "xor eax, eax \n"
-    "mov ax, [ecx+4] \n"
+    "mov ax, [ecx+1] \n"
     "ret \n"
 "halosGateDown: \n"
-    "xor esi, esi \n"
-    "xor edi, edi \n"
-    "mov esi, 0xB8D18B4C \n"
-    "xor eax, eax \n"
-    "mov al, 0x20 \n"
+    "mov ecx, [esp+0x4] \n"     // ntdllApiAddr
+    "mov edx, [esp+0x8] \n"     // index
+    "mov eax, 0x20 \n"
     "mul dx \n"
     "sub ecx, eax \n"
-    "mov edi, [ecx] \n"
-    "cmp esi, edi \n"
+    "mov bl, [ecx] \n"          // byte at offset 0
+    "cmp bl, 0xB8 \n"           // check it is 0xb8
     "jne error \n"
-    "xor eax,eax \n"
-    "mov ax, [ecx+4] \n"
+    "mov bl, [ecx+0x3] \n"      // byte at offset 3
+    "cmp bl, 0x0 \n"            // check it is 0x0
+    "jne error \n"
+    "mov bl, [ecx+0x4] \n"      // byte at offset 4
+    "cmp bl, 0x0 \n"            // check it is 0x0
+    "jne error \n"
+    "xor eax, eax \n"
+    "mov ax, [ecx+1] \n"
     "ret \n"
 "HellsGate: \n"
     "mov edi, [esp+0x4] \n" // store the syscall number in edi, lets hope is not used!
