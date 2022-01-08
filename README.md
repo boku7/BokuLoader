@@ -1,17 +1,20 @@
 # BokuLoader - Cobalt Strike Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
+### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
+
 ![](/images/top2.png)
 
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
-+ Created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
++ Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
 ## Versions
 + Different version of this User-Defined Reflective Loader project can be found in the versions folder
 
 | Version | File | Description |
 |:-------:|:-----|:------------|
+|1.0|BokuLoader-v1.0.c| Massive update from [@s4ntiago_p](https://twitter.com/s4ntiago_p)! New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! | 
 |0.81|BokuLoader-v0.81.c| HellsGate&HalosGate direct syscalls added by [@s4ntiago_p](https://twitter.com/s4ntiago_p) are now an optional feature! | 
 |0.8|BokuLoader-v0.8.c|  [@s4ntiago_p](https://twitter.com/s4ntiago_p) from CoreSecurity pushed a massive update: HellsGate & HalosGate syscaller, makefile, bug fixes, and more! |
 |0.71|BokuLoader-v0.71.c| #NOHEADERCOPY Feature Added! Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers.|
@@ -51,7 +54,6 @@ make
 2. Follow "Usage" instructions
 
 ## Credits / References
-### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
 ### Reflective Loader
 + https://github.com/stephenfewer/ReflectiveDLLInjection
 + 100% recommend these videos if you're interested in Reflective DLL:  
