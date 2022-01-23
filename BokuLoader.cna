@@ -158,9 +158,7 @@ set BEACON_RDLL_GENERATE_LOCAL {
 # $1 = dll name
 # $2 = arch
 # ------------------------------------
-# set BEACON_RDLL_SIZE {
-#	warn("========== Running 'BEACON_RDLL_SIZE' for DLL Name " . $1 . " with architecture " . $2);
-#	# return "0";
-#	# return "5";
-#	return "100";
-# }
+set BEACON_RDLL_SIZE {
+	warn("========== Running 'BEACON_RDLL_SIZE' for DLL Name " . $1 . " with architecture " . $2);
+	return "100";
+}
