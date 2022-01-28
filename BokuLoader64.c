@@ -38,12 +38,6 @@ typedef struct Section {
     ULONG32 Characteristics;
 }Section;
 
-typedef struct _UNICODE_STRING {
-  USHORT Length;
-  USHORT MaximumLength;
-  PWSTR  Buffer;
-} UNICODE_STRING, *PUNICODE_STRING;
-
 PVOID   getDllBase(LPCSTR);
 PVOID   getFirstEntry(VOID);
 PVOID   getNextEntry(PVOID currentEntry, PVOID firstEntry);
