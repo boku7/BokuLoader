@@ -55,14 +55,42 @@ sub dump_my_pe {
 
 sub generate_my_dll {
 
-	local('$handle $data $loader $temp_dll');
+	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
 
 	# ---------------------------------------------------------------------
 	# Load a object file that contains a Reflective Loader.
 	# The architecture ($3) is used in the path.
 	# ---------------------------------------------------------------------
 
-	$handle = openf(script_resource("BokuLoader.".$3.".o"));
+	$name = "dist/BokuLoader";
+
+	$profile = data_query("metadata")["c2profile"];
+
+	$userwx     = [$profile getString: ".stage.userwx"];
+	$obfuscate  = [$profile getString: ".stage.obfuscate"];
+	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
+	$stomppe    = [$profile getString: ".stage.stomppe"];
+
+	# check if we should enable RWX
+	if ($sleep_mask eq "true" && $userwx eq "true") {
+		$name = $name . "_rwx";
+	} else {
+		$name = $name . "_rx";
+	}
+
+	# check if we need to free or stomp the headers
+	if ($sleep_mask eq "true" && $obfuscate eq "true") {
+		$name = $name . "_free";
+	} else if ($stomppe eq "true") {
+		$name = $name . "_stomp";
+	} else {
+		$name = $name . "_leave";
+	}
+
+	$name = $name . "." . $3 . ".o";
+	warn("loading: " . $name);
+
+	$handle = openf(script_resource($name));
 	$data   = readb($handle, -1);
 	closef($handle);
 
