@@ -12,6 +12,7 @@ Cobalt Strike [User-Defined Reflective Loader](https://hstechdocs.helpsystems.co
 ## Features
 | Feature | Description |
 |:-------:|:------------|
+| BEACON_RDLL_SIZE 100K | BokuLoader uses the increased reserved size in Beacon for a larger User Defined Reflective Loader. This increases the initial beacon size to 100kb (5kb default). BokuLoader will work out of the box when generating raw unstaged shellcode. BokuLoader will not work out of the box with the default Cobalt Strike Artifact kit. [A custom artifact kit must be loaded](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm), which increases the `stagesize` to 412256 on `build.sh` in the artifact kit. |
 | x86 Support | [@Santiago Pecin](https://twitter.com/s4ntiago_p) - New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! |
 | Direct Syscalls | HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! |
 | AMSI & ETW bypasses | AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @\_xpn\_ + @offsectraining + @ajpc500 for their research and code |
@@ -22,34 +23,20 @@ Cobalt Strike [User-Defined Reflective Loader](https://hstechdocs.helpsystems.co
 | `userwx: false` | The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions | 
 
 ## Usage
-1. Start your Cobalt Strike Team Server with or without a profile.
-2. Unless you only generate RAW payloads, set the stagesize to 412256 on `build.sh` in the artifact kit.
-![](/images/changeStagesize.png)
-3. Load the `dist-template/artifact.cna` Aggressor script.
-![](/images/loadArtifact.png)
-4. Go to your Cobalt Strike GUI and import the BokuLoader.cna Aggressor script.
-![](/images/loadRdllScriptMenu.png)
-5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
-  + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
-![](/images/CreateBeaconStageless.png)
-6. Use the Script Console to make sure that the beacon created successfully with this User-Defined Reflective Loader
-  + If successful, the output in the Script Console will look like this:  
-![](/images/beaconCreateSuccess.png)
-
-## Build
-1. Run the `make` command after installling required dependencies
-```bash
-# Install brew on macOS if you need it (https://brew.sh/)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-# Install Ming using Brew
-brew install mingw-w64
-# Clone this Reflective DLL project from this github repo
-git clone https://github.com/boku7/BokuLoader.git
-# Compile the BokuLoader Object file
-cd BokuLoader/
-make
-```
-2. Follow "Usage" instructions
+1. Start the Cobalt Strike Team Server.
+2. Connect to the CS Team Server using the CS GUI client.
+3. Ensure mingw GCC is installed. (MacOS & Linux supported)
+4. If generating RAW payloads, skip this step. This step is for native artifact support.
+  + Download the Cobalt Strike Artifact Kit.
+  + Set the stagesize to 412256 within `build.sh` of the artifact kit.
+  ![](/images/changeStagesize.png)
+  + Build the Artifacts.
+  + Load the Artifact Aggressor script via the Script Manager within the CS GUI client.
+  ![](/images/loadArtifact.png)
+5. Import the `BokuLoader.cna` Aggressor script via the Script Manager.
+  ![](/images/loadRdllScriptMenu.png)
+6. Generate a beacon payload (`Attacks` -> `Packages` -> `Windows Executable (S)`)
+  ![](/images/CreateBeaconStageless.png)
 
 ## Credits / References
 ### Reflective Loader
