@@ -52,7 +52,7 @@ sub generate_my_dll {
 	println("BokuLoader file path: $scRscPath");
 	$scRscPath = $scRscPath.'/';
 	# File name for the to be compiled reflective loader object file 
-	$rlOF = "dist/BokuLoader.".$3.'.o';
+	$rlOF = "BokuLoader.".$3.'.o';
 
 	println("[+] Beacon Architecture: $3");
 	if($3 eq "x64"){
