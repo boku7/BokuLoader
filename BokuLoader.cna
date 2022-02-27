@@ -1,26 +1,52 @@
+
+# User Defined Reflective Loader Kit Aggressor Script
+
+# Enable Debug of PE content
+# The generated PE content will be displayed in the script console if debug is true
+
 #$debug = "true";
 $debug = "false";
 
-sub caseInsensitiveCompare {
+# ===========================================================================
+# 'case insensitive sort' from sleep manual...
+# ===========================================================================
+sub caseInsensitiveCompare
+{
     $a = lc($1);
     $b = lc($2);
     return $a cmp $b;
 }
 
+# ===========================================================================
+# Dump PE Information
+# $1 = Beacon DLL content
+# ===========================================================================
 sub dump_my_pe {
     local('$out $key $val %pemap @sorted_keys');
+
     %pemap = pedump($1);
+
+    # ---------------------------------------------------
+    # Example listing all items from hash/map...
+    # ---------------------------------------------------
     @sorted_keys = sort(&caseInsensitiveCompare, keys(%pemap));
-    foreach $key (@sorted_keys) {
+    foreach $key (@sorted_keys)
+    {
         $out = "$[50]key";
-        foreach $val (values(%pemap, @($key))) {
+        foreach $val (values(%pemap, @($key)))
+        {
             $out .= " $val";
             println($out);
         }
     }
+
+    # ---------------------------------------------------
+    # Example of grabbing specific items from hash/map...
+    # ---------------------------------------------------
     local('@loc_cs @val_cs');
     @loc_cs = values(%pemap, @("CheckSum."));
     @val_cs = values(%pemap, @("CheckSum."));
+
     println("");
     println("My DLL CheckSum Location: " . @loc_cs);
     println("My DLL CheckSum Value: " . @val_cs);
@@ -28,92 +54,43 @@ sub dump_my_pe {
 }
 
 sub generate_my_dll {
+
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
-	
-	$profile    = data_query("metadata")["c2profile"];
+
+	# ---------------------------------------------------------------------
+	# Load a object file that contains a Reflective Loader.
+	# The architecture ($3) is used in the path.
+	# ---------------------------------------------------------------------
+
+	$name = "dist/BokuLoader";
+
+	$profile = data_query("metadata")["c2profile"];
+
 	$userwx     = [$profile getString: ".stage.userwx"];
 	$obfuscate  = [$profile getString: ".stage.obfuscate"];
 	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
 	$stomppe    = [$profile getString: ".stage.stomppe"];
 
-	println("Malleable PE Options:");
-	println("|_ UseRWX     : $userwx");
-	println("|_ Obfuscate  : $obfuscate");
-	println("|_ Sleep_Mask : $sleep_mask");
-	println("|_ StompPE    : $stomppe");
-
-	$Compile = '';
-	$CC_x64  = 'x86_64-w64-mingw32-gcc';
-	$CC_x86  = 'i686-w64-mingw32-gcc';
-	@OPTIONS = @('-masm=intel', '-Wall', '-Wno-pointer-arith');
-
-	# Get the file path for BokuLoader
-	$scRscPath = script_resource();
-	println("BokuLoader file path: $scRscPath");
-	$scRscPath = $scRscPath.'/';
-	# File name for the to be compiled reflective loader object file 
-	$rlOF = "BokuLoader.".$3.'.o';
-
-	println("[+] Beacon Architecture: $3");
-	if($3 eq "x64"){
-		$Compile = $CC_x64;
-	}else {
-		$Compile = $CC_x86;
-	}
-
-        $Compile = $Compile.' -c '.$scRscPath.'BokuLoader.'.$3.'.c'.' -o '.$scRscPath.$rlOF;
-
-	println("[+] Arch Compile String: $Compile");
-
 	# check if we should enable RWX
-	if ($sleep_mask eq "true" || $userwx eq "true") {
-		if ($userwx eq "false") {
-			warn("Sleep_Mask requires RWX or beacon will brick");
-		}
-		println("[+] Compiling with RWX");
-		push(@OPTIONS,'-DUSE_RWX');
+	if ($sleep_mask eq "true" && $userwx eq "true") {
+		$name = $name . "_rwx";
 	} else {
-		println("[+] Compiling with No RWX");
+		$name = $name . "_rx";
 	}
 
 	# check if we need to free or stomp the headers
-	if ($obfuscate eq "true") {
-		println("[+] Compiling with Free  Reflective DLL Header");
-		push(@OPTIONS,'-DFREE_HEADERS');
+	if ($sleep_mask eq "true" && $obfuscate eq "true") {
+		$name = $name . "_free";
 	} else if ($stomppe eq "true") {
-		println("[+] Compiling with Stomp Reflective DLL Header");
-		push(@OPTIONS,'-DSTOMP_HEADERS');
+		$name = $name . "_stomp";
 	} else {
-		println("[+] Compiling with Leave Reflective DLL Header");
+		$name = $name . "_leave";
 	}
 
-	# Flatten all the reflective loader compile options into a string and add options string to compile string
-	$opts = ' '.join(' ', @OPTIONS);
-	$Compile .= $opts;
+	$name = $name . "." . $3 . ".o";
+	warn("loading: " . $name);
 
-	# Linux, mingw will be in /usr/bin/ - on macos mingw will be in /usr/local/bin/ which will not be in the $PATH for exec()
-	$pRlOF = $scRscPath.$rlOF;
-	if (-isFile $pRlOF) {
-		deleteFile($pRlOF);
-	}
-	$procexec = exec($Compile);
-	if (-isFile $pRlOF) {
-		println("[+] Compiled Reflective Loader to object file: $pRlOF");
-	}else{
-		warn("Could not find mingw in \$PATH. Trying in /usr/local/bin/ directory.");
-		$Compile = "/usr/local/bin/".$Compile;
-		#println("[+] Compile command: $Compile");
-		$procexec = exec($Compile);
-		# Needs this readAll() or compile command wont process
-		@data = readAll($procexec);
-		if (-isFile $pRlOF) {
-			println("[+] Compiled Reflective Loader to object file: $pRlOF");
-		}
-	}
-	closef($procexec);
-
-	# Get the bytes for the compiled Reflective Loader object file
-	$handle = openf(script_resource($rlOF));
+	$handle = openf(script_resource($name));
 	$data   = readb($handle, -1);
 	closef($handle);
 
@@ -124,37 +101,91 @@ sub generate_my_dll {
 		return $null;
 	}
 
+	# ---------------------------------------------------------------------
 	# extract loader ($loader) from the object file data ($data).
+	# ---------------------------------------------------------------------
 	$loader = extract_reflective_loader($data);
+
 	warn("Extracted Length: " . strlen($loader));
+
 	if (strlen($loader) eq 0) {
 		warn("Error extracting reflective loader.");
 		return $null;
 	}
+
+	# ---------------------------------------------------------------------
 	# Setup the reflective loader ($loader) in the beacon ($2).
+	# ---------------------------------------------------------------------
 	$temp_dll = setup_reflective_loader($2, $loader);
+
+	# ---------------------------------------------------------------------
+	# OPTIONAL: Additional Customization of the PE...
+	# 	- Use 'pedump' function to get information for the updated DLL.
+	# 	- Use these convenience functions to perform transformations on the DLL:
+	# 		pe_remove_rich_header
+	# 		pe_insert_rich_header
+	# 		pe_set_compile_time_with_long
+	# 		pe_set_compile_time_with_string
+	# 		pe_set_export_name
+	# 		pe_update_checksum
+	# 	- Use these basic functions to perform transformations on the DLL:
+	# 		pe_mask
+	# 		pe_mask_section
+	# 		pe_mask_string
+	# 		pe_patch_code
+	# 		pe_set_string
+	# 		pe_set_stringz
+	# 		pe_set_long
+	# 		pe_set_short
+	# 		pe_set_value_at
+	# 		pe_stomp
+	# ---------------------------------------------------------------------
 
 	if ($debug eq "true") {
 		dump_my_pe($temp_dll);
 	}
+
+	# ---------------------------------------------------------------------
 	# Give back the updated beacon DLL.
+	# ---------------------------------------------------------------------
 	return $temp_dll;
 }
 
-# $1 = DLL file name # $2 = DLL content # $3 = arch
+# ------------------------------------
+# $1 = DLL file name
+# $2 = DLL content
+# $3 = arch
+# ------------------------------------
 set BEACON_RDLL_GENERATE {
 	warn("========== Running 'BEACON_RDLL_GENERATE' for DLL " . $1 . " with architecture " . $3 . " ==========");
 	return generate_my_dll($1, $2, $3);
 }
 
-# $1 = DLL file name # $2 = DLL content # $3 = arch # $4 = parent Beacon ID # $5 = GetModuleHandleA pointer # $6 = GetProcAddress pointer
+# ------------------------------------
+# $1 = DLL file name
+# $2 = DLL content
+# $3 = arch
+# $4 = parent Beacon ID
+# $5 = GetModuleHandleA pointer
+# $6 = GetProcAddress pointer
+# ------------------------------------
 set BEACON_RDLL_GENERATE_LOCAL {
 	warn("========== Running 'BEACON_RDLL_GENERATE_LOCAL' for DLL " . $1 . " with architecture " . $3 . " Beacon ID " . $4 . " GetModuleHandleA " . $5 . " GetProcAddress " . $6 . " ==========");
 	return generate_my_dll($1, $2, $3);
 }
 
-# Override the beacon loader to load beacons with larger space reserved for the User Defined Reflective Loader function.
-# $1 = dll name # $2 = arch
+# ------------------------------------
+# Override the beacon loader to load beacons with larger space reserved
+# for the User Defined Reflective Loader function.
+# Return a number for the required reflective loader space (in KB).
+# Valid return values: 0 (default - 5KB), 5 (original/standard), 100
+# Example for 100 KB:
+#    return "100";
+# See: BEACON_RDLL_GENERATE/BEACON_RDLL_GENERATE_LOCAL
+# ------------------------------------
+# $1 = dll name
+# $2 = arch
+# ------------------------------------
 set BEACON_RDLL_SIZE {
 	warn("========== Running 'BEACON_RDLL_SIZE' for DLL Name " . $1 . " with architecture " . $2);
 	return "100";
