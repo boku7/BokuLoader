@@ -1,22 +1,22 @@
 # BokuLoader - Cobalt Strike Reflective Loader
 Cobalt Strike [User-Defined Reflective Loader](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) written in Assembly & C for advanced evasion capabilities.
 
-### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
+### Project Contributors: [Bobby Cooke](https://twitter.com/0xBoku) & [Santiago Pecin](https://twitter.com/s4ntiago_p)
 
 ![](/images/top2.png)
 
-+ Based on Stephen Fewer's incredible Reflective Loader project: 
++ This project is based on [Stephen Fewer's](https://twitter.com/stephenfewer) incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
 ## Features
 | Feature | Description |
 |:-------:|:------------|
-| x86 Support | By [@s4ntiago_p](https://twitter.com/s4ntiago_p)! New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! |
+| x86 Support | [@Santiago Pecin](https://twitter.com/s4ntiago_p) - New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! |
 | Direct Syscalls | HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! |
 | AMSI & ETW bypasses | AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @\_xpn\_ + @offsectraining + @ajpc500 for their research and code |
 | [Custom xGetProcAddress](https://github.com/boku7/BokuLoader/blob/main/BokuLoader.x64.c#L535) | Resolve APIs natively, without using the `GetProcAddres()` WINAPI |
-| [Malleable PE](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm#_Toc65482854) Support | [@s4ntiago_p](https://twitter.com/s4ntiago_p) added support for loader options directly from the configured Cobalt Strike Malleable C2 profile. Options supported are `stomppe`,`obfuscate`,`userwx`, and `sleep_mask` |
+| [Malleable PE](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm#_Toc65482854) Support | [@Santiago Pecin](https://twitter.com/s4ntiago_p) - Added support for loader options directly from the configured Cobalt Strike Malleable C2 profile. Options supported are `stomppe`,`obfuscate`,`userwx`, and `sleep_mask` |
 | FREE_HEADERS | Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers. | 
 | STOMP_HEADERS | If `stomppe: true` in Cobalt Strike Malleable Profile is set, then the loader will stomp out the PE header | 
 | `userwx: false` | The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions | 
