@@ -104,7 +104,7 @@ sub generate_my_dll {
         deleteFile($pRlOF);
     }
     $procexec = exec($Compile);
-    wait($procexec);
+    #wait($procexec);
     if (-isFile $pRlOF) {
         println("[+] Compiled Reflective Loader to object file: $pRlOF");
     }else{
@@ -112,7 +112,7 @@ sub generate_my_dll {
         $Compile = "/usr/local/bin/".$Compile;
         #println("[+] Compile command: $Compile");
         $procexec = exec($Compile);
-        wait($procexec);
+        #wait($procexec);
         # Needs this readAll() or compile command wont process
         @dataA = readAll($procexec);
         if (-isFile $pRlOF) {
