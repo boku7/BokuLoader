@@ -1,42 +1,61 @@
 # BokuLoader - Cobalt Strike Reflective Loader
-Cobalt Strike [User-Defined Reflective Loader](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) written in Assembly & C for advanced evasion capabilities.
+Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
-### Project Contributors: [Bobby Cooke](https://twitter.com/0xBoku) & [Santiago Pecin](https://twitter.com/s4ntiago_p)
+### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
 
 ![](/images/top2.png)
 
-+ This project is based on [Stephen Fewer's](https://twitter.com/stephenfewer) incredible Reflective Loader project: 
++ Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
-## Features
-| Feature | Description |
-|:-------:|:------------|
-| BEACON_RDLL_SIZE 100K | BokuLoader uses the increased reserved size in Beacon for a larger User Defined Reflective Loader. This increases the initial beacon size to 100kb (5kb default). BokuLoader will work out of the box when generating raw unstaged shellcode. BokuLoader will not work out of the box with the default Cobalt Strike Artifact kit. [A custom artifact kit must be loaded](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm), which increases the `stagesize` to `412256` within `build.sh` of the artifact kit. |
-| x86 Support | [@Santiago Pecin](https://twitter.com/s4ntiago_p) - New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! |
-| Direct Syscalls | HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! |
-| AMSI & ETW bypasses | AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @\_xpn\_ + @offsectraining + @ajpc500 for their research and code |
-| [Custom xGetProcAddress](https://github.com/boku7/BokuLoader/blob/main/BokuLoader.x64.c#L535) | Resolve APIs natively, without using the `GetProcAddres()` WINAPI |
-| [Malleable PE](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm#_Toc65482854) Support | [@Santiago Pecin](https://twitter.com/s4ntiago_p) - Added support for loader options directly from the configured Cobalt Strike Malleable C2 profile. Options supported are `stomppe`,`obfuscate`,`userwx`, and `sleep_mask` |
-| FREE_HEADERS | Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers. | 
-| STOMP_HEADERS | If `stomppe: true` in Cobalt Strike Malleable Profile is set, then the loader will stomp out the PE header | 
-| `userwx: false` | The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions | 
+## Versions
++ Different version of this User-Defined Reflective Loader project can be found in the versions folder
+
+| Version | File | Description |
+|:-------:|:-----|:------------|
+|1.0|BokuLoader-v1.0.c| Massive update from [@s4ntiago_p](https://twitter.com/s4ntiago_p)! New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! | 
+|0.81|BokuLoader-v0.81.c| HellsGate&HalosGate direct syscalls added by [@s4ntiago_p](https://twitter.com/s4ntiago_p) are now an optional feature! | 
+|0.8|BokuLoader-v0.8.c|  [@s4ntiago_p](https://twitter.com/s4ntiago_p) from CoreSecurity pushed a massive update: HellsGate & HalosGate syscaller, makefile, bug fixes, and more! |
+|0.71|BokuLoader-v0.71.c| #NOHEADERCOPY Feature Added! Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers.|
+|0.7|BokuLoader-v0_7.c| Updated to work with Cobalt Strike v4.5! |
+|0.6|ReflectiveLoader-v0_6.c| NoRWX feature added! The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions |
+|0.5|ReflectiveLoader-v0_5.c| Added HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! Credit to @ilove2pwn_ for recommending removing ASM Stubs! Haven't got all of them, but will keep working at it :) |
+|0.4|ReflectiveLoader-v0_4.c| AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @\_xpn\_ + @offsectraining + @ajpc500 for their research and code |
+|0.3.1|ReflectiveLoader-v0_3_1.c| Changed strings from wchar to char and unpack them to unicode with MMX registers. Fixes linux compilation error discovered by @mariuszbit |
+|0.3|ReflectiveLoader-v0_3.c| String obfuscation using new technique. |
+|0.2|ReflectiveLoader-v0_2.c| Checks the Loader to see if dependent DLL's already exist to limit times LoadLibrary() is called, custom GetSymbolAddress function to reduce calls to GetProcAddress(), and code refactor. |
+|0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
 
 ## Usage
-1. Start the Cobalt Strike Team Server.
-2. Connect to the CS Team Server using the CS GUI client.
-3. Ensure mingw GCC is installed. (MacOS & Linux supported)
-4. If generating RAW payloads, skip this step. This step is for native artifact support.
-  + Download the Cobalt Strike Artifact Kit.
-  + Set the stagesize to 412256 within `build.sh` of the artifact kit.
-  ![](/images/changeStagesize.png)
-  + Build the Artifacts.
-  + Load the Artifact Aggressor script via the Script Manager within the CS GUI client.
-  ![](/images/loadArtifact.png)
-5. Import the `BokuLoader.cna` Aggressor script via the Script Manager.
-  ![](/images/loadRdllScriptMenu.png)
-6. Generate a beacon payload (`Attacks` -> `Packages` -> `Windows Executable (S)`)
-  ![](/images/CreateBeaconStageless.png)
+1. Start your Cobalt Strike Team Server with or without a profile.
+2. Unless you only generate RAW payloads, set the stagesize to 412256 on `build.sh` in the artifact kit.
+![](/images/changeStagesize.png)
+3. Load the `dist-template/artifact.cna` Aggressor script.
+![](/images/loadArtifact.png)
+4. Go to your Cobalt Strike GUI and import the BokuLoader.cna Aggressor script.
+![](/images/loadRdllScriptMenu.png)
+5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+  + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
+![](/images/CreateBeaconStageless.png)
+6. Use the Script Console to make sure that the beacon created successfully with this User-Defined Reflective Loader
+  + If successful, the output in the Script Console will look like this:  
+![](/images/beaconCreateSuccess.png)
+
+## Build
+1. Run the `make` command after installling required dependencies
+```bash
+# Install brew on macOS if you need it (https://brew.sh/)
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Install Ming using Brew
+brew install mingw-w64
+# Clone this Reflective DLL project from this github repo
+git clone https://github.com/boku7/BokuLoader.git
+# Compile the BokuLoader Object file
+cd BokuLoader/
+make
+```
+2. Follow "Usage" instructions
 
 ## Credits / References
 ### Reflective Loader
