@@ -3,29 +3,17 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 ### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
 
-![](/images/top2.png)
+## Features
++ Direct NT Syscalls via HellsGate & HalosGate
++ NOHEADERCOPY - Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers
++ NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
++ XGetProcAddress for resolving symbols
++ 100k UDRL Size
 
+# Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
-
-## Versions
-+ Different version of this User-Defined Reflective Loader project can be found in the versions folder
-
-| Version | File | Description |
-|:-------:|:-----|:------------|
-|1.0|BokuLoader-v1.0.c| Massive update from [@s4ntiago_p](https://twitter.com/s4ntiago_p)! New 32bit loader with WOW64 support, 32bit Halos&HellsGate, code optimizations & bug fixes! | 
-|0.81|BokuLoader-v0.81.c| HellsGate&HalosGate direct syscalls added by [@s4ntiago_p](https://twitter.com/s4ntiago_p) are now an optional feature! | 
-|0.8|BokuLoader-v0.8.c|  [@s4ntiago_p](https://twitter.com/s4ntiago_p) from CoreSecurity pushed a massive update: HellsGate & HalosGate syscaller, makefile, bug fixes, and more! |
-|0.71|BokuLoader-v0.71.c| #NOHEADERCOPY Feature Added! Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers.|
-|0.7|BokuLoader-v0_7.c| Updated to work with Cobalt Strike v4.5! |
-|0.6|ReflectiveLoader-v0_6.c| NoRWX feature added! The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions |
-|0.5|ReflectiveLoader-v0_5.c| Added HellsGate & HalosGate direct syscaller, replaced allot of ASM stubs, code refactor, and ~500 bytes smaller. Credit to @SEKTOR7net the jedi HalosGate creator & @smelly__vx & @am0nsec Creators/Publishers of the Hells Gate technique! Credit to @ilove2pwn_ for recommending removing ASM Stubs! Haven't got all of them, but will keep working at it :) |
-|0.4|ReflectiveLoader-v0_4.c| AMSI & ETW bypasses baked into reflective loader. Can disable by commenting #define BYPASS line when compiling. Credit to @mariuszbit for the awesome idea. Credit to @\_xpn\_ + @offsectraining + @ajpc500 for their research and code |
-|0.3.1|ReflectiveLoader-v0_3_1.c| Changed strings from wchar to char and unpack them to unicode with MMX registers. Fixes linux compilation error discovered by @mariuszbit |
-|0.3|ReflectiveLoader-v0_3.c| String obfuscation using new technique. |
-|0.2|ReflectiveLoader-v0_2.c| Checks the Loader to see if dependent DLL's already exist to limit times LoadLibrary() is called, custom GetSymbolAddress function to reduce calls to GetProcAddress(), and code refactor. |
-|0.1|ReflectiveLoader-v0_1.c| This is the original reflective loader created for this project. It includes the notes within the C file. This initial version was created with research and learning in mind. Little obfuscation and evasion techniques are used in this version.|
 
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile.
