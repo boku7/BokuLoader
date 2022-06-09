@@ -9,6 +9,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
 + XGetProcAddress for resolving symbols
 + 100k UDRL Size
++ Caesar Cipher for string obfuscation
 
 # Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
