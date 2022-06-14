@@ -6,7 +6,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ## Features
 + Direct NT Syscalls via HellsGate & HalosGate
 + NOHEADERCOPY - Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers
-+ NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
++ NoRWX - The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
 + XGetProcAddress for resolving symbols
 + 100k UDRL Size
 + Caesar Cipher for string obfuscation
@@ -18,7 +18,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile.
-2. Unless you only generate RAW payloads, set the stagesize to 412256 on `build.sh` in the artifact kit.
+2. Unless you only generate RAW payloads, set the stagesize to 412256 in `build_arsenal_kit.sh` located in the Arsenal Kit. Note that recently this kit contains the Artifact Kit.
 ![](/images/changeStagesize.png)
 3. Load the `dist-template/artifact.cna` Aggressor script.
 ![](/images/loadArtifact.png)
