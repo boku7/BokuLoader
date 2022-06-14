@@ -16,6 +16,20 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
 
+## Build
+Run the `make` command after installling required dependencies.
+```bash
+# Install Homebrew on macOS if needed (https://brew.sh/).
+/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+# Install Ming using Brew
+brew install mingw-w64
+# Clone this Reflective DLL project
+git clone https://github.com/boku7/BokuLoader.git
+# Compile the BokuLoader Object file
+cd BokuLoader/
+make
+```
+
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile.
 2. The Artifact Kit is now part of the Arsenal Kit.
@@ -32,21 +46,6 @@ Unless you only generate RAW payloads, set the stagesize to 412256 in `arsenal-k
 6. Use the Script Console to make sure that the Beacon created successfully with this User-Defined Reflective Loader.
   + If successful, the output in the Script Console will look like this:  
 ![](/images/beaconCreateSuccess.png)
-
-## Build
-1. Run the `make` command after installling required dependencies.
-```bash
-# Install brew on macOS if you need it (https://brew.sh/)
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-# Install Ming using Brew
-brew install mingw-w64
-# Clone this Reflective DLL project
-git clone https://github.com/boku7/BokuLoader.git
-# Compile the BokuLoader Object file
-cd BokuLoader/
-make
-```
-2. Follow "Usage" instructions
 
 ## Credits / References
 ### Reflective Loader
