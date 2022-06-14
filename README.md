@@ -18,7 +18,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 ## Usage
 1. Start your Cobalt Strike Team Server with or without a profile.
-2. Unless you only generate RAW payloads, set the stagesize to 412256 in `build_arsenal_kit.sh` located in the Arsenal Kit. Note that recently this kit contains the Artifact Kit.
+2. The Artifact Kit is now part of the Arsenal Kit.
+Unless you only generate RAW payloads, set the stagesize to 412256 in `arsenal-kit/kits/artifact/build.sh`
 ![](/images/changeStagesize.png)
 3. Load the `dist-template/artifact.cna` Aggressor script.
 ![](/images/loadArtifact.png)
