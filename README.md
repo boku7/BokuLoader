@@ -21,26 +21,26 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 2. The Artifact Kit is now part of the Arsenal Kit.
 Unless you only generate RAW payloads, set the stagesize to 412256 in `arsenal-kit/kits/artifact/build.sh`
 ![](/images/changeStagesize.png)
-3. Load the Aggressor script by going to Cobalt Strike > Script Manager > Load:
+3. Load the Artifact script by going to Cobalt Strike > Script Manager > Load:
 `arsenal-kit > dist > artifact > artifact.cna`
 ![](/images/loadArtifact.png)
-4. Go to your Cobalt Strike GUI and import the BokuLoader.cna Aggressor script.
+4. Load the BokuLoader.cna Aggressor script.
 ![](/images/loadRdllScriptMenu.png)
-5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
+5. Generate your x64 payload by going to Attacks > Packages > Windows Executable (S).
   + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
 ![](/images/CreateBeaconStageless.png)
-6. Use the Script Console to make sure that the Beacon created successfully with this User-Defined Reflective Loader
+6. Use the Script Console to make sure that the Beacon created successfully with this User-Defined Reflective Loader.
   + If successful, the output in the Script Console will look like this:  
 ![](/images/beaconCreateSuccess.png)
 
 ## Build
-1. Run the `make` command after installling required dependencies
+1. Run the `make` command after installling required dependencies.
 ```bash
 # Install brew on macOS if you need it (https://brew.sh/)
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 # Install Ming using Brew
 brew install mingw-w64
-# Clone this Reflective DLL project from this github repo
+# Clone this Reflective DLL project
 git clone https://github.com/boku7/BokuLoader.git
 # Compile the BokuLoader Object file
 cd BokuLoader/
