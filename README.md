@@ -5,8 +5,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 
 ## Features
 + Direct NT Syscalls via HellsGate & HalosGate
-+ NOHEADERCOPY - Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers
-+ NoRWX - The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
++ NOHEADERCOPY - Loader will not copy headers over to Beacon. Decommits the first memory page which would normally hold the headers
++ NoRWX - The Reflective loader writes Beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
 + XGetProcAddress for resolving symbols
 + 100k UDRL Size
 + Caesar Cipher for string obfuscation
@@ -28,7 +28,7 @@ Unless you only generate RAW payloads, set the stagesize to 412256 in `arsenal-k
 5. Generate your x64 payload (Attacks -> Packages -> Windows Executable (S))
   + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
 ![](/images/CreateBeaconStageless.png)
-6. Use the Script Console to make sure that the beacon created successfully with this User-Defined Reflective Loader
+6. Use the Script Console to make sure that the Beacon created successfully with this User-Defined Reflective Loader
   + If successful, the output in the Script Console will look like this:  
 ![](/images/beaconCreateSuccess.png)
 
