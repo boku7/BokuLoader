@@ -21,7 +21,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 2. The Artifact Kit is now part of the Arsenal Kit.
 Unless you only generate RAW payloads, set the stagesize to 412256 in `arsenal-kit/kits/artifact/build.sh`
 ![](/images/changeStagesize.png)
-3. Load the `dist-template/artifact.cna` Aggressor script.
+3. Load the Aggressor script by going to Cobalt Strike > Script Manager > Load:
+`arsenal-kit > dist > artifact > artifact.cna`
 ![](/images/loadArtifact.png)
 4. Go to your Cobalt Strike GUI and import the BokuLoader.cna Aggressor script.
 ![](/images/loadRdllScriptMenu.png)
