@@ -16,7 +16,7 @@ sub generate_my_dll {
 	#$stomppe    = [$profile getString: ".stage.stomppe"];
 
 
-	$name = $name .".x64.o";
+	$name = $name . $3 . ".o";
 	warn("loading: " . $name);
 
 	$handle = openf(script_resource($name));
