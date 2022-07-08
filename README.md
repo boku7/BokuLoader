@@ -16,7 +16,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Caesar Cipher for string obfuscation
 + Prepend ASM Instructions
 
-# Project Origins
+## Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Initially created while working through Renz0h's Reflective DLL videos from the [Sektor7 Malware Developer Intermediate (MDI) Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/) 
@@ -30,6 +30,34 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
 + Generating `RAW` beacons works out of the box. If your using the Artifact Kit for your beacon loader, you will need to increase the `stagesize`
 
+## Detection Guidance
++ BokuLoader does not support the Cobalt Strike `sleep_mask` option.
+  + This is due to the supported `userwx false` settings hardcoded into BokuLoader.
+  + Since the memory sections are either `RW` or `RX`, this will cause sleep encryption to fail when attempting to write to the `.text` section of beacon.
+  + Analyzing the beacons process memory will reveal strings common to Cobalt Strike.
++ BokuLoader changes some commonly detected strings to new hardcoded values. These strings can be used to signature BokuLoader:
+
+|Original Cobalt Strike String|BokuLoader Cobalt Strike String|
+|------------------------------|---------------------------------|
+|ReflectiveLoader|djoiqnfkjlnslfmn|
+|Microsoft Base Cryptographic Provider v1.0|12367321236742382543232341241261363163151d|
+|(admin)|(tomin)|
+|beacon|bacons|
++ BokuLoader calls the following NT systemcalls to setup the loaded executable beacon memory: `NtAllocateVirtualMemory`, `NtProtectVirtualMemory`, `NtFreeVirtualMemory`
+  + These are called directly from the BokuLoader executable memory. These system calls are not backed by NTDLL memory.
+  + Setting userland hooks in `ntdll.dll` will not detect these systemcalls.
+  + It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage when they are not called from `ntdll.dll`.
+  + The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
++ The original beacon memory which loads beacon to a new memory location will be left in memory.
+  + This original memory will contain both the obfuscated beacon DLL header and the beacon itself.
+  + The executable beacon memory will not contain the beacon DLL header.
+  + It may be possible to scan memory to detect these duplicate memory regions.
++ The loaded beacon memory is hardcoded as a `Private: Commit` memory region and is `292KB`.
+  + The original beacon memory will be larger, as it also contains the `0x1000` byte beacon DLL header, used for loading the beacon DLL into memory.
+  + The memory section will be loaded at a `+0x1000` offset. This is due to the first 0x1000 bytes of the memory being deallocated within BokuLoader.
++ The BokuLoader source code is provided within the repository and can be used to create memory sigatures. 
++ If you have additional detection guidance, please feel free to contribute by submitting a pull request. 
+  
 
 ## Credits / References
 ### Reflective Loader
