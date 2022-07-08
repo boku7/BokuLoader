@@ -28,7 +28,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 4. Generate the x64 beacon (Attacks -> Packages -> Windows Executable (S))
 5. Use the Script Console to ensure BokuLoader was implemented in the beacon build
 + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
-+ Generating `RAW` beacons works out of the box. If your using the Artifact Kit for your beacon loader, you will need to increase the `stagesize`
++ Generating `RAW` beacons works out of the box. When using the Artifact Kit for the beacon loader, the `stagesize` variable must be larger than the default.
+  + See the [Cobalt Strike User-Defined Reflective Loader documenation](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) for additional information
 
 ## Detection Guidance
 + BokuLoader does not support the Cobalt Strike `sleep_mask` option.
@@ -55,7 +56,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + The loaded beacon memory is hardcoded as a `Private: Commit` memory region and is `292KB`.
   + The original beacon memory will be larger, as it also contains the `0x1000` byte beacon DLL header, used for loading the beacon DLL into memory.
   + The memory section will be loaded at a `+0x1000` offset. This is due to the first 0x1000 bytes of the memory being deallocated within BokuLoader.
-+ The BokuLoader source code is provided within the repository and can be used to create memory sigatures. 
++ The BokuLoader source code is provided within the repository and can be used to create memory signatures.
 + If you have additional detection guidance, please feel free to contribute by submitting a pull request. 
   
 
