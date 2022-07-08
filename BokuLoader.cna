@@ -98,9 +98,15 @@ sub generate_my_dll {
 
 	#$userwx     = [$profile getString: ".stage.userwx"];
 	#$obfuscate  = [$profile getString: ".stage.obfuscate"];
-	#$sleep_mask = [$profile getString: ".stage.sleep_mask"];
+	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
 	#$stomppe    = [$profile getString: ".stage.stomppe"];
 	#$prepend = [$profile getString: ".stage.transform-x64.prepend"];
+
+	# Does not support sleep_mask since memory is allocated as RW/RX
+	if ($sleep_mask eq "true") {
+		warn("Malleable C2 option 'stage.sleep_mask true' is not supported. Reverting to using default CS Reflective Loader.");
+		return $null;
+	} 
 
 	#@strings = [$profile getList: ".stage.string"];
 	#println(@strings);
