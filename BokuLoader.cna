@@ -104,7 +104,7 @@ sub generate_my_dll {
 
 	# Does not support sleep_mask since memory is allocated as RW/RX
 	if ($sleep_mask eq "true") {
-		warn("Malleable C2 option 'stage.sleep_mask true' is not supported. Reverting to using default CS Reflective Loader.");
+		warn("[!] Failure : Malleable C2 option 'stage.sleep_mask true' is not supported. Reverting to using default CS Reflective Loader.");
 		return $null;
 	} 
 
