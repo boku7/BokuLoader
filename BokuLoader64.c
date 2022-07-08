@@ -679,14 +679,14 @@ __asm__(
     "ret \n" 
 
 "getExportDirectory: \n"
-    "push rbx \n"
+    "push rbx \n" // save the rbx register to the stack
     "mov r8, rcx \n"
     "mov ebx, [rcx+0x3C] \n"
     "add rbx, r8 \n"
     "xor rax, rax \n"
     "mov eax, [rbx+0x88] \n"
     "add rax, r8 \n"
-    "pop rbx \n"
+    "pop rbx \n" // restore rbx from stack
     "ret \n" // return ExportDirectory;
 
 "getExportDirectorySize: \n"
