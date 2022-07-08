@@ -63,16 +63,16 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ## Credits / References
 ### Reflective Loader
 + https://github.com/stephenfewer/ReflectiveDLLInjection
-+ 100% recommend these videos if you're interested in Reflective DLL:  
++ Checkout these videos if you're interested in Reflective DLL:  
   + [Dancing with Import Address Table (IAT) - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435207-dancing-with-iat)
   + [Walking through Export Address Table - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435189-walking-through-export-address-table)
   + [Reflective Injection Explained - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435355-reflective-injection-explained)
   + [ReflectiveLoader source review - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435383-reflectiveloader-source-review)
 ### HalosGate SysCaller
 + Reenz0h from @SEKTOR7net
-  + Most of the C techniques I use are from Reenz0h's awesome courses and blogs 
-  + Best classes for malware development out there.
-  + Creator of the halos gate technique. His work was the motivation for this work.
+  + Checkout Reenz0h's awesome courses and blogs!
+  + Best classes for malware development I have taken.
+  + Creator of the halos gate technique. His work was initially the motivation for this work.
   + [Sektor7 HalosGate Blog](https://blog.sektor7.net/#!res/2021/halosgate.md)
 ### HellsGate Syscaller
 + @smelly__vx & @am0nsec ( Creators/Publishers of the Hells Gate technique )
@@ -93,5 +93,3 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + https://outflank.nl/blog/2020/12/26/direct-syscalls-in-beacon-object-files/
 + https://www.cs.uaf.edu/2011/fall/cs301/lecture/10_12_asm_c.html
 + http://gcc.gnu.org/onlinedocs/gcc-4.0.2/gcc/Extended-Asm.html#Extended-Asm
-### Cobalt Strike C2 Profile Generator
-+ [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
