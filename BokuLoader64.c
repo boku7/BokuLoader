@@ -604,7 +604,7 @@ __asm__(
     "mov rax, rcx \n"               // copy the position pointer
     "sub rax, 0x4 \n"               // check for second egg. If it's not there then its an error
     "cmp ebx, [rax] \n"             // check for egg
-    "jne getRdllBase \n"
+    "jne dec \n"
     "sub rax, 0x50 \n"              // Return the base address of our reflective DLL
     "pop rbx \n"
     "ret \n"                        // return initRdllAddr
