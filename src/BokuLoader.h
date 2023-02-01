@@ -1,5 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#define STATUS_SUCCESS 0x0
 
 typedef struct Export {
     void *   Directory;
@@ -258,6 +259,18 @@ typedef struct _TEB32
 // https://github.com/Alexpux/mingw-w64/blob/master/mingw-w64-crt/intrincs/RtlSecureZeroMemory.c
 PVOID WINAPI RtlSecureZeroMemory(PVOID ptr,SIZE_T cnt);
 
+typedef enum _PROCESSINFOCLASS {
+  ProcessBasicInformation = 0,
+  ProcessDebugPort = 7,
+  ProcessWow64Information = 26,
+  ProcessImageFileName = 27,
+  ProcessBreakOnTermination = 29
+} PROCESSINFOCLASS;
+
+typedef enum _MEMORY_INFORMATION_CLASS {
+  MemoryBasicInformation
+} MEMORY_INFORMATION_CLASS;
+
 void * getPEB();
 void basicCaesar_Decrypt(int stringLength, unsigned char * string, int chiperDecrementKey);
 void *   getDllBase(char *);
@@ -272,8 +285,8 @@ void *   getExportNameTable(void * dllBase, void * dllExportDirectory);
 void *   getExportOrdinalTable(void * dllBase, void * dllExportDirectory);
 unsigned int getNumberOfNames(void * dllExportDirectory);
 void *   getSymbolAddress(void * symbolStr, unsigned long StrSize, void * dllBase, void * AddressTable, void * NameTable, void * OrdinalTable, unsigned int NumberOfNames);
-void *   xGetProcAddress(void * symbolStr, PDll dll);
-void *   getRdllBase(void *);
+void *   xGetProcAddress(void * symbolStr, PDll dll); void *   getRdllBase(void *);
+void * xLoadLibrary(void * library_name);
 void *   getNewExeHeader(void * dllBase);
 unsigned int getDllSize(void * newExeHeader);
 unsigned int getDllSizeOfHeaders(void * newExeHeader);
@@ -306,6 +319,8 @@ typedef NTSTATUS (NTAPI * t_RtlAnsiStringToUnicodeString)(PUNICODE_STRING Destin
 typedef VOID (NTAPI * t_RtlFreeUnicodeString)(PUNICODE_STRING UnicodeString);
 typedef VOID (NTAPI * t_RtlInitAnsiString)(PANSI_STRING DestinationString, PCSZ SourceString);
 typedef NTSTATUS (NTAPI * t_LdrLoadDll)(OPTIONAL PWSTR DllPath, OPTIONAL PULONG DllCharacteristics, PUNICODE_STRING DllName, PVOID *DllHandle);
+typedef long(NTAPI* tNtQueryVirtualMemory)( HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
+typedef NTSTATUS  (NTAPI * t_NtUnmapViewOfSection)( IN HANDLE ProcessHandle, IN PVOID BaseAddress);
 
 
 typedef struct APIS{
@@ -316,6 +331,8 @@ typedef struct APIS{
     t_RtlFreeUnicodeString  RtlFreeUnicodeString;
     t_RtlInitAnsiString RtlInitAnsiString;
     t_LdrLoadDll LdrLoadDll;
+    t_NtUnmapViewOfSection NtUnmapViewOfSection;
+    tNtQueryVirtualMemory NtQueryVirtualMemory;
     void* pNtAllocateVirtualMemory;
     void* pNtProtectVirtualMemory;
     void* pNtFreeVirtualMemory;
@@ -328,5 +345,3 @@ typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
 #ifndef NT_SUCCESS
  #define NT_SUCCESS(Status) ((LONG32)(Status) >= 0)
 #endif
-void LdrProcessIat( PVOID image, PVOID directory ); 
-void * xLoadLibrary(void * library_name);

@@ -15,6 +15,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + 100k UDRL Size
 + Caesar Cipher for string obfuscation
 + Prepend ASM Instructions
++ Supports Malleable C2 profile option `cleanup "true"`
 
 ## Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
@@ -26,7 +27,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 2. Start your Cobalt Strike Team Server
 3. Within Cobalt Strike, import the `BokuLoader.cna` Aggressor script
 4. Generate the x64 beacon (Attacks -> Packages -> Windows Executable (S))
-5. Use the Script Console to ensure BokuLoader was implemented in the beacon build
+5. Use the `Script Console` to ensure BokuLoader was implemented in the beacon build
+
 + Does not support x86 option. The x86 bin is the original Reflective Loader object file.  
 + Generating `RAW` beacons works out of the box. When using the Artifact Kit for the beacon loader, the `stagesize` variable must be larger than the default.
   + See the [Cobalt Strike User-Defined Reflective Loader documenation](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) for additional information
@@ -49,12 +51,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + Setting userland hooks in `ntdll.dll` will not detect these systemcalls.
   + It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage when they are not called from `ntdll.dll`.
   + The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
-+ The original beacon memory which loads beacon to a new memory location will be left in memory.
-  + This original memory will contain both the obfuscated beacon DLL header and the beacon itself.
-  + The executable beacon memory will not contain the beacon DLL header.
-  + It may be possible to scan memory to detect these duplicate memory regions.
 + The loaded beacon memory is hardcoded as a `Private: Commit` memory region and is `292KB`.
-  + The original beacon memory will be larger, as it also contains the `0x1000` byte beacon DLL header, used for loading the beacon DLL into memory.
   + The memory section will be loaded at a `+0x1000` offset. This is due to the first 0x1000 bytes of the memory being deallocated within BokuLoader.
 + The BokuLoader source code is provided within the repository and can be used to create memory signatures.
 + If you have additional detection guidance, please feel free to contribute by submitting a pull request. 
