@@ -36,10 +36,6 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + See the [Cobalt Strike User-Defined Reflective Loader documenation](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) for additional information
 
 ## Detection Guidance
-+ BokuLoader does not support the Cobalt Strike `sleep_mask` option.
-  + This is due to the supported `userwx false` settings hardcoded into BokuLoader.
-  + Since the memory sections are either `RW` or `RX`, this will cause sleep encryption to fail when attempting to write to the `.text` section of beacon.
-  + Analyzing the beacons process memory will reveal strings common to Cobalt Strike.
 + BokuLoader changes some commonly detected strings to new hardcoded values. These strings can be used to signature BokuLoader:
 
 |Original Cobalt Strike String|BokuLoader Cobalt Strike String|
