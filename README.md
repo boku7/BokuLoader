@@ -4,6 +4,8 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 ### Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
 
 ## Features
++ Supports `sleepmask "true"` & all sleepmask kit options 
+  + default sleepmask, sleepmask kit 47, sleepmask `MASK_TEXT_SECTION 1`, and Ekko implementation all tested & work
 + Stomp MZ Magic Bytes
 + Find-Self EggHunter
 + Direct NT Syscalls via HellsGate & HalosGate
