@@ -103,7 +103,10 @@ sub generate_my_dll {
 	$obfuscate  = [$profile getString: ".stage.obfuscate"];
 	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
 	$stomppe    = [$profile getString: ".stage.stomppe"];
-	$prepend = [$profile getString: ".stage.transform-x64.prepend"];
+	$prepend    = [$profile getString: ".stage.transform-x64.prepend"];
+	$allocator  = [$profile getString: ".stage.allocator"];
+	$magic_mz   = [$profile getString: ".stage.magic_mz_x64"];
+	$smartinject = [$profile getString: ".stage.smartinject"];
 
 	#@strings = [$profile getList: ".stage.string"];
 	#println(@strings);
@@ -138,9 +141,12 @@ sub generate_my_dll {
 	println("|__ userwx: ".$userwx);
 	println("|__ stomppe: ".$stomppe);
 	println("|__ prepend: ".$prepend);
+	println("|__ allocator: ".$allocator);
+	println("|__ magic_mz: ".$magic_mz);
+	println("|__ smartinject: ".$smartinject);
 	$temp_dll = setup_transformations($temp_dll,$3);
 	$temp_dll = setup_strings($temp_dll);
-	$temp_dll = setEgg($temp_dll);
+#	$temp_dll = setEgg($temp_dll);
 	$temp_dll = boku_pe_mask($temp_dll);
 	$temp_dll = boku_strrep($temp_dll);
 	$temp_dll = prependBytes($temp_dll);
