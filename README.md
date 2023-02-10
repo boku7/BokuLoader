@@ -63,6 +63,9 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
   + [Walking through Export Address Table - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463262-pe-madness/1435189-walking-through-export-address-table)
   + [Reflective Injection Explained - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435355-reflective-injection-explained)
   + [ReflectiveLoader source review - Sektor 7 MDI Course](https://institute.sektor7.net/courses/rto-maldev-intermediate/463258-reflective-dlls/1435383-reflectiveloader-source-review)
+  + TitanLdr
+  + [AceLdr](https://github.com/kyleavery/AceLdr)
+  + [KaynLdr](https://github.com/Cracked5pider/KaynLdr)
 ### HalosGate SysCaller
 + Reenz0h from @SEKTOR7net
   + Checkout Reenz0h's awesome courses and blogs!
