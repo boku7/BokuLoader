@@ -271,6 +271,7 @@ typedef enum _MEMORY_INFORMATION_CLASS {
   MemoryBasicInformation
 } MEMORY_INFORMATION_CLASS;
 
+void * returnRDI();
 void * getPEB();
 void basicCaesar_Decrypt(int stringLength, unsigned char * string, int chiperDecrementKey);
 void *   getDllBase(char *);

