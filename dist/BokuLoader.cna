@@ -506,7 +506,7 @@ sub generate_my_dll {
 	$temp_dll = setup_strings($temp_dll);
 
 #	$temp_dll = setEgg($temp_dll);
-	$temp_dll = boku_pe_mask($temp_dll);
+#	$temp_dll = boku_pe_mask($temp_dll); # Currrently causes issue if prepend transform is in C2 profile. Causes wrong bytes to be overwritten due to offset change
 	$temp_dll = boku_strrep($temp_dll);
 	$temp_dll = prependBytes($temp_dll);
 
