@@ -484,6 +484,172 @@ sub setupAllocatorMethod {
 	return $beacon_dll;
 }
 
+
+# Sets NULLs (0x00) at a location in PE
+# Arg1 = BeaconBytes ; Arg2 = Offset ; Arg3 = Size to Zero-out
+sub setNulls{
+	local('$index $Byte $size $Offset $Nulls $beacon_dll');
+	$beacon_dll = $1;
+	$Offset     = $2;
+	$size       = $3;
+	$Nulls      = 0;
+
+	# shorts are 2 bytes, so we will null 2 bytes at a time. We use $size as counter so divide by 2
+	$size = $size / 2;
+
+	#Write Nulls
+	println("[+] Zeroing out memory at offset 0x".uc(formatNumber($Offset, 16)));
+	for ($x = 0; $x < $size; $x++) {
+		$index = $Offset;
+		$index += $x * 2;
+		#println("[+] Index 0x".uc(formatNumber($index, 16)));
+		$beacon_dll = pe_set_short($beacon_dll, $index, $Nulls);
+	}
+
+	return $beacon_dll;
+}
+
+sub nullExportDirectory{
+	local('$beacon_dll %pemap @ExportDirectory_size_array @ExportDirectory_VA_array $ExportDirectory_size $ExportDirectory_VA');
+	$beacon_dll = $1;
+	%pemap = pedump($beacon_dll);
+	$ExportDirectory_RawAddress = 0;
+	# Export Directory is first entry in Data Directory
+	@ExportDirectory_size_array = values(%pemap, @("DataDirectory.0.Size.<value>"));
+	@ExportDirectory_VA_array   = values(%pemap, @("DataDirectory.0.VirtualAddress.<value>"));
+	$ExportDirectory_size       = @ExportDirectory_size_array[0];
+	$ExportDirectory_VA         = @ExportDirectory_VA_array[0];
+
+	println("[+] Zeroing out the Export Directory since we do not need it and it contains IOCs");
+	println("|__ Export Directory virtual address  : 0x".uc(formatNumber($ExportDirectory_VA, 16)));
+	println("|__ Export Directory size             : 0x".uc(formatNumber($ExportDirectory_size, 16)));
+	
+	$rawVsVirtualDiff = getSectionRawVsVirtualOffset($beacon_dll,$ExportDirectory_VA);
+	$ExportDirectory_RawAddress = $ExportDirectory_VA - $rawVsVirtualDiff;
+	println("|__ Export Directory raw     address  : 0x".uc(formatNumber($ExportDirectory_RawAddress, 16)));
+
+	printByteDump($beacon_dll,$ExportDirectory_size,$ExportDirectory_RawAddress);
+
+	$beacon_dll = setNulls($beacon_dll,$ExportDirectory_RawAddress,$ExportDirectory_size);
+	printByteDump($beacon_dll,$ExportDirectory_size,$ExportDirectory_RawAddress);
+	return $beacon_dll;
+}
+
+sub printByteDump{
+	local('$beacon_dll $size $offset $index $Byte @Bytes @BytesRow $rowIndex');
+	$beacon_dll = $1;
+	$size       = $2;
+	$offset     = $3;
+
+	# print in rows of 16 bytes
+	$size = (16 - $size % 16) + $size;
+
+	println("[+] Printing 0x".uc(formatNumber($size, 16))." bytes starting at offset 0x".uc(formatNumber($offset, 16)));
+
+	for ($x = 0; $x < $size; $x++) {
+		$index = $offset;
+		$index += $x;
+		$Byte = byteAt($beacon_dll, $index);
+		@Bytes[$x] = uc(formatNumber($Byte, 16));
+		if ((($x % 16) == 0) && ($x != 0)){
+			#println("x equals $x");
+			$rowIndex = 0;
+			print("0x".uc(formatNumber($x, 16))."    ");
+			for ($y = 0; $y < 16; $y++){
+				#println("y equals $y");
+				$rowIndex = ($x - 16) + $y;
+				#println("rowIndex equals $rowIndex");
+				$length = strlen(@Bytes[$rowIndex]);
+				if ($length == 1){
+					@Bytes[$rowIndex] = "0".@Bytes[$rowIndex];
+				}
+				@BytesRow[$y] = @Bytes[$rowIndex];
+				print(@Bytes[$rowIndex]." ");
+				if ($y == 15){
+					println();
+				}
+			}
+		}
+	}
+
+	println("|_ bytes: ".@Bytes);
+	return $beacon_dll;
+}
+
+sub getSectionRawVsVirtualOffset{
+	local('%pemap $rawVsVirtualDiff $temp_beacon_dll $relative_virtual_address');
+	local('@relocRawA $relocRaw @relocVAA $relocVA $relocDiff');
+	local('@textRawA $textRaw @textVAA $textVA $textDiff');
+	local('@dataRawA $dataRaw @dataVAA $dataVA $dataDiff');
+	local('@pdataRawA $pdataRaw @pdataVAA $pdataVA $pdataDiff');
+	local('@rdataRawA $rdataRaw @rdataVAA $rdataVA $rdataDiff');
+
+	$temp_beacon_dll          = $1;
+	$relative_virtual_address = $2;
+
+	%pemap = pedump($temp_beacon_dll);
+
+   	@relocRawA = values(%pemap, @(".reloc.PointerToRawData.<value>"));
+	$relocRaw  = @relocRawA[0];
+	@relocVAA  = values(%pemap, @(".reloc.VirtualAddress.<value>"));
+	$relocVA   = @relocVAA[0];
+	$relocDiff = $relocVA - $relocRaw;
+
+ 	@pdataRawA = values(%pemap, @(".pdata.PointerToRawData.<value>"));
+	$pdataRaw  = @pdataRawA[0];
+	@pdataVAA  = values(%pemap, @(".pdata.VirtualAddress.<value>"));
+	$pdataVA   = @pdataVAA[0];
+	$pdataDiff = $pdataVA - $pdataRaw;
+
+	@textRawA = values(%pemap, @(".text.PointerToRawData.<value>"));
+	$textRaw  = @textRawA[0];
+	@textVAA  = values(%pemap, @(".text.VirtualAddress.<value>"));
+	$textVA   = @textVAA[0];
+	$textDiff = $textVA - $textRaw;
+
+	@rdataRawA = values(%pemap, @(".rdata.PointerToRawData.<value>"));
+	$rdataRaw  = @rdataRawA[0];
+	@rdataVAA  = values(%pemap, @(".rdata.VirtualAddress.<value>"));
+	$rdataVA   = @rdataVAA[0];
+	$rdataDiff = $rdataVA - $rdataRaw;
+
+	@dataRawA = values(%pemap, @(".data.PointerToRawData.<value>"));
+	$dataRaw  = @dataRawA[0];
+	@dataVAA  = values(%pemap, @(".data.VirtualAddress.<value>"));
+	$dataVA   = @dataVAA[0];
+	$dataDiff = $dataVA - $dataRaw;
+
+	println("Section   |     RAW Offset     | Virtual Address    | Raw Vs VA Difference");
+	println("--------------------------------------------------------------------------");
+	println("TEXT      |      0x00".uc(formatNumber($textRaw, 16))."              0x0".uc(formatNumber($textVA, 16))."               0x0".uc(formatNumber($textDiff, 16))); 
+	println("RDATA     |      0x".uc(formatNumber($rdataRaw, 16))."              0x".uc(formatNumber($rdataVA, 16))."               0x".uc(formatNumber($rdataDiff, 16))); 
+	println("DATA      |      0x".uc(formatNumber($dataRaw, 16))."              0x".uc(formatNumber($dataVA, 16))."               0x".uc(formatNumber($dataDiff, 16))); 
+	println("PDATA     |      0x".uc(formatNumber($pdataRaw, 16))."              0x".uc(formatNumber($pdataVA, 16))."               0x".uc(formatNumber($pdataDiff, 16))); 
+	println("RELOC     |      0x".uc(formatNumber($relocRaw, 16))."              0x".uc(formatNumber($relocVA, 16))."               0x".uc(formatNumber($relocDiff, 16))); 
+
+	if(($textVA <= $relative_virtual_address) && ($relative_virtual_address < $rdataVA)){
+		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .text section");
+		$rawVsVirtualDiff = $textDiff;
+	
+	}else if(($rdataVA <= $relative_virtual_address) && ($relative_virtual_address < $dataVA)){
+		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .rdata section");
+		$rawVsVirtualDiff = $rdataDiff;
+
+	}else if(($dataVA <= $relative_virtual_address) && ($relative_virtual_address < $pdataVA)){
+		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .data section");
+		$rawVsVirtualDiff = $dataDiff;
+
+	}else if(($pdataVA <= $relative_virtual_address) && ($relative_virtual_address < $rdataVA)){
+		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .pdata section");
+		$rawVsVirtualDiff = $pdataDiff;
+	}else{
+		println("[+] Out of options, probably RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .reloc section");
+		$rawVsVirtualDiff = $relocDiff;
+	}
+	println("[+] Raw vs VA section difference is 0x".uc(formatNumber($rawVsVirtualDiff, 16)));
+	return $rawVsVirtualDiff;
+}
+
 sub generate_my_dll {
 
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
@@ -541,6 +707,11 @@ sub generate_my_dll {
 	println("|__ image_size_x64: ".$image_size_x64);
 	println("|__ module_x64: ".$module_x64);
 	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
+
+	#my_dump_my_pe($temp_dll);
+
+	$temp_dll = nullExportDirectory($temp_dll);
+
 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
 	if ($obfuscate eq "true") {
 		$xorKey = 0xC3;
@@ -549,6 +720,7 @@ sub generate_my_dll {
 		$temp_dll = boku_pe_mask_ImportDLLNames($temp_dll, $xorKey);
 		$temp_dll = boku_pe_mask_SectionNames($temp_dll, $xorKey);
 	} 
+	# honor C2 malleable PE modifications in C2 profile
 	$temp_dll = setup_transformations($temp_dll,$3);
 	$temp_dll = setup_strings($temp_dll);
 
