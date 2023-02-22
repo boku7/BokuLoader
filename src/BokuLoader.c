@@ -58,7 +58,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         size = rdll_src.size;
         hMapFile = api.CreateFileMappingA(NtCurrentProcess(),0,PAGE_EXECUTE_READWRITE,0,size,0);
         if(hMapFile){
-            rdll_dst.dllBase = api.MapViewOfFile(hMapFile,0xF003F,0,0,0);
+            base = api.MapViewOfFile(hMapFile,0xF003F,0,0,0);
             if(base){
                 oldprotect = 0;
                 rdll_dst.dllBase = base;
