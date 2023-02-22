@@ -17,13 +17,13 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
     - `Kernel32.LoadLibraryEx`
     - Does not resolve addresses in LDR PEB entry as detailed by [MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
   - [Same DLL stomping requirements set by CS implementation apply](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm)
-+ Supports `obfuscate "true"`
-+ Supports `sleepmask "true"` wuth sleepmask kit  
++ Supports `obfuscate "true"` with custom UDRL Aggressor script implementation.
++ Supports `sleepmask "true"` with sleepmask kit  
   + sleepmask kit 47, sleepmask `MASK_TEXT_SECTION 1`, and Ekko implementation all tested & work
 + Direct NT Syscalls via HellsGate & HalosGate
 + PE Header Obfuscation
 + PE String Replacement
-+ NOHEADERCOPY - Loader will not copy headers over to beacon. Decommits the first memory page which would normally hold the headers
++ NOHEADERCOPY - Loader will not copy headers raw beacon DLL to virtual beacon DLL. First `0x1000` bytes will be nulls.
 + NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
 + XGetProcAddress for resolving symbols
 + 100k UDRL Size
