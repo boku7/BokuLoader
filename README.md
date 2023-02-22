@@ -30,6 +30,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Caesar Cipher for string obfuscation
 + Prepend ASM Instructions
 + Supports Malleable C2 profile option `cleanup "true"`
++ Zero out the export directory.
 
 ## Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
