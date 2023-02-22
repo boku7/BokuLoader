@@ -564,7 +564,7 @@ sub printByteDump{
 					@Bytes[$rowIndex] = "0".@Bytes[$rowIndex];
 				}
 				@BytesRow[$y] = @Bytes[$rowIndex];
-				print(@Bytes[$rowIndex]." ");
+				#print(@Bytes[$rowIndex]." ");
 				if ($y == 15){
 					println();
 				}
