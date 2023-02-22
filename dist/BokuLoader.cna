@@ -528,15 +528,17 @@ sub nullExportDirectory{
 	$ExportDirectory_RawAddress = $ExportDirectory_VA - $rawVsVirtualDiff;
 	println("|__ Export Directory raw     address  : 0x".uc(formatNumber($ExportDirectory_RawAddress, 16)));
 
+	println("|__ Export Directory Bytes before zeroing out  :");
 	printByteDump($beacon_dll,$ExportDirectory_size,$ExportDirectory_RawAddress);
 
 	$beacon_dll = setNulls($beacon_dll,$ExportDirectory_RawAddress,$ExportDirectory_size);
+	println("|__ Export Directory Bytes after zeroing out  :");
 	printByteDump($beacon_dll,$ExportDirectory_size,$ExportDirectory_RawAddress);
 	return $beacon_dll;
 }
 
 sub printByteDump{
-	local('$beacon_dll $size $offset $index $Byte @Bytes @BytesRow $rowIndex');
+	local('$beacon_dll $size $offset $index $Byte @Bytes @BytesRow $rowIndex $row');
 	$beacon_dll = $1;
 	$size       = $2;
 	$offset     = $3;
@@ -544,7 +546,7 @@ sub printByteDump{
 	# print in rows of 16 bytes
 	$size = (16 - $size % 16) + $size;
 
-	println("[+] Printing 0x".uc(formatNumber($size, 16))." bytes starting at offset 0x".uc(formatNumber($offset, 16)));
+	#println("[+] Printing 0x".uc(formatNumber($size, 16))." bytes starting at offset 0x".uc(formatNumber($offset, 16)));
 
 	for ($x = 0; $x < $size; $x++) {
 		$index = $offset;
@@ -554,7 +556,8 @@ sub printByteDump{
 		if ((($x % 16) == 0) && ($x != 0)){
 			#println("x equals $x");
 			$rowIndex = 0;
-			print("0x".uc(formatNumber($x, 16))."    ");
+			$row = ($offset + $x) - 16;
+			print("0x".uc(formatNumber($row, 16))."    ");
 			for ($y = 0; $y < 16; $y++){
 				#println("y equals $y");
 				$rowIndex = ($x - 16) + $y;
@@ -564,15 +567,14 @@ sub printByteDump{
 					@Bytes[$rowIndex] = "0".@Bytes[$rowIndex];
 				}
 				@BytesRow[$y] = @Bytes[$rowIndex];
-				#print(@Bytes[$rowIndex]." ");
+				print(@Bytes[$rowIndex]." ");
 				if ($y == 15){
 					println();
 				}
 			}
 		}
 	}
-
-	println("|_ bytes: ".@Bytes);
+	#println("|_ bytes: ".@Bytes);
 	return $beacon_dll;
 }
 
