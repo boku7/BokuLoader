@@ -1,9 +1,22 @@
 # BokuLoader - Cobalt Strike Reflective Loader
 Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advanced evasion capabilities.
 
+## Primary Goal:
++ Recreate a Cobalt Strike reflective loader capable of handling all malleable C2 profile options.
+
 ### Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
 
 ## Features
++ Supports all allocator methods via C2 profile 
+  - `set MapViewOfFile` uses `kernel32.CreateFileMappingA` & `kernel32.MapViewOfFile` 
+  - `set VirtualAlloc` uses direct syscall to `NtAllocateVirtualMemory`
+  - `set HeapAlloc` uses `kernel32.GetProcessHeap` and `ntdll.RtlAllocateHeap`
+  - All memory protection changes are done via direct syscall to `NtProtectVirtualMemory`
++ Supports DLL Module stomping via C2 profile with `set module_x64`
+  - Uses same IOCs as CS: 
+    - `Kernel32.LoadLibraryEx`
+    - Does not resolve addresses in LDR PEB entry as detailed by [MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
+  - [Same DLL stomping requirements set by CS implementation apply](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm)
 + Supports `obfuscate "true"`
 + Supports `sleepmask "true"` wuth sleepmask kit  
   + sleepmask kit 47, sleepmask `MASK_TEXT_SECTION 1`, and Ekko implementation all tested & work
