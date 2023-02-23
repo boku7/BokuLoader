@@ -31,6 +31,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Prepend ASM Instructions
 + Supports Malleable C2 profile option `cleanup "true"`
 + Zero out the export directory.
++ `set entry_point` supported.
 
 ## Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
