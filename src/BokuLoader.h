@@ -312,6 +312,8 @@ void parseDLL(Dll * dll);
 SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed );
 SIZE_T StringLengthA(LPCSTR String);
 
+void* checkFakeEntryAddress_returnReal(Dll * raw_beacon_dll_struct, Dll * virtual_beacon_dll_struct);
+
 typedef void *  (WINAPI * tLoadLibraryA)  (char *);
 typedef void *  (WINAPI * t_LoadLibraryExA)  (char *lpLibFileName,HANDLE hFile,DWORD  dwFlags);
 typedef void*  (WINAPI * tGetProcAddress)(void*, char*);
