@@ -18,8 +18,7 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
     - Does not resolve addresses in LDR PEB entry as detailed by [MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
   - [Same DLL stomping requirements set by CS implementation apply](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm)
 + Supports `obfuscate "true"` with custom UDRL Aggressor script implementation.
-+ Supports `sleepmask "true"` with sleepmask kit  
-  + sleepmask kit 47, sleepmask `MASK_TEXT_SECTION 1`, and Ekko implementation all tested & work
++ Supports sleepmask kit Ekko implementation
 + Direct NT Syscalls via HellsGate & HalosGate
 + PE Header Obfuscation
 + PE String Replacement
