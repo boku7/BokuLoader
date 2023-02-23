@@ -33,6 +33,9 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + Zero out the export directory.
 + `set entry_point` supported.
 
+## Test
++ (2/22/23) All 4 allocator methods tested with [threatexpress/malleable-c2/master/jquery-c2.4.7.profile](https://raw.githubusercontent.com/threatexpress/malleable-c2/master/jquery-c2.4.7.profile)
+
 ## Project Origins
 + Based on Stephen Fewer's incredible Reflective Loader project: 
   + https://github.com/stephenfewer/ReflectiveDLLInjection
@@ -105,5 +108,6 @@ Cobalt Strike User-Defined Reflective Loader written in Assembly & C for advance
 + https://outflank.nl/blog/2020/12/26/direct-syscalls-in-beacon-object-files/
 + https://www.cs.uaf.edu/2011/fall/cs301/lecture/10_12_asm_c.html
 + http://gcc.gnu.org/onlinedocs/gcc-4.0.2/gcc/Extended-Asm.html#Extended-Asm
-### Cobalt Strike C2 Profile Generator
+### Cobalt Strike C2 Profiles
 + [Tylous's epic SourcePoint project](https://github.com/Tylous/SourcePoint)
++ [threatexpress/malleable-c2/jquery-c2.4.7.profile](https://raw.githubusercontent.com/threatexpress/malleable-c2/master/jquery-c2.4.7.profile)
