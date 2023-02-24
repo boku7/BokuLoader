@@ -36,7 +36,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 |`obfuscate`|true/false|Supported via BokuLoader implementation
 |`entry_point`|RVA as decimal number|Supported via BokuLoader implementation
 |`cleanup`|true|Supported via CS integration
-|`userwx`|true/false|Command is ignored. BokuLoader uses `RX`/`RW` for all allocator methods (`userwx "false"`)
+|`userwx`|true/false|Supported via BokuLoader implementation
 |`sleep_mask`|(true/false) or (Sleepmask Kit+true)|Supported. When using default "sleepmask true" (without sleepmask kit) set "userwx true". When using sleepmask kit which supports RX beacon.text memory (`src47/Ekko`) set "sleepmask true" && "userwx false".
 |`magic_mz_x64`|4 char string|`BokuLoader.cna` Aggressor script modification
 |`magic_pe`|2 char string|`BokuLoader.cna` Aggressor script modification
