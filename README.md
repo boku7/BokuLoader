@@ -1,5 +1,5 @@
 # BokuLoader - Cobalt Strike Reflective Loader
-A proof-of-concept Cobalt Strike User-Defined Reflective Loader which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
+A proof-of-concept Cobalt Strike Reflective Loader which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
 
 ## Current Goal:
 + Integrate with CS to handle malleable PE C2 profile options, or recreate the malleable PE options within BokuLoader.
