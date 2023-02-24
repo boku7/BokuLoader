@@ -82,6 +82,24 @@ _Before using this project, in any form, you should properly test the evasion fe
 |(admin)|(tomin)|
 |beacon|bacons|
 
+### Memory Allocators
+
+#### DLL Module Stomping
+- The `Kernel32.LoadLibraryExA` is called to map the DLL from disk
+- The 3rd argument to `Kernel32.LoadLibraryExA` is `DONT_RESOLVE_DLL_REFERENCES  (0x00000001)`
+  - the system does not call DllMain
+- Does not resolve addresses in LDR PEB entry as detailed by [MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
+- Detectable by scanning process memory with [pe-sieve](https://github.com/hasherezade/pe-sieve) tool
+
+#### Heap Allocation
+- Executable `RX` or `RWX` memory will exist in the heap if sleepmask kit is not used.
+
+#### Mapped Allocator
+- The `Kernel32.CreateFileMappingA` & `Kernel32.MapViewOfFile` is called to allocate memory for the virtual beacon DLL.
+
+### Sleepmask Detection
+- If sleepmask kit is used, there exists detection methods for this independent memory allocation [as detailed by MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
+
 ### Direct Syscalls
 + BokuLoader calls the following NT systemcalls to setup the loaded executable beacon memory: `NtAllocateVirtualMemory`, `NtProtectVirtualMemory`, `NtFreeVirtualMemory`
 + These are called directly from the BokuLoader executable memory. These system calls are not backed by NTDLL memory.
