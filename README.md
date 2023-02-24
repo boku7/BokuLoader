@@ -72,21 +72,27 @@ _Before using this project, in any form, you should properly test the evasion fe
   + See the [Cobalt Strike User-Defined Reflective Loader documenation](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) for additional information
 
 ## Detection Guidance
+### Hardcoded Strings 
 + BokuLoader changes some commonly detected strings to new hardcoded values. These strings can be used to signature BokuLoader:
 
 |Original Cobalt Strike String|BokuLoader Cobalt Strike String|
 |------------------------------|---------------------------------|
-|ReflectiveLoader|djoiqnfkjlnslfmn|
+|ReflectiveLoader|BokuLoader|
 |Microsoft Base Cryptographic Provider v1.0|12367321236742382543232341241261363163151d|
 |(admin)|(tomin)|
 |beacon|bacons|
+
+### Direct Syscalls
 + BokuLoader calls the following NT systemcalls to setup the loaded executable beacon memory: `NtAllocateVirtualMemory`, `NtProtectVirtualMemory`, `NtFreeVirtualMemory`
-  + These are called directly from the BokuLoader executable memory. These system calls are not backed by NTDLL memory.
-  + Setting userland hooks in `ntdll.dll` will not detect these systemcalls.
-  + It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage when they are not called from `ntdll.dll`.
-  + The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
-+ The loaded beacon memory is hardcoded as a `Private: Commit` memory region and is `292KB`.
-  + The memory section will be loaded at a `+0x1000` offset. This is due to the first 0x1000 bytes of the memory being deallocated within BokuLoader.
++ These are called directly from the BokuLoader executable memory. These system calls are not backed by NTDLL memory.
++ Setting userland hooks in `ntdll.dll` will not detect these systemcalls.
++ It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage when they are not called from `ntdll.dll`.
++ The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
+
+### Virtual Beacon DLL Header
+- The first `0x1000` bytes of the virtual beacon DLL is zero'd out.
+
+### Source Code Available
 + The BokuLoader source code is provided within the repository and can be used to create memory signatures.
 + If you have additional detection guidance, please feel free to contribute by submitting a pull request. 
   
