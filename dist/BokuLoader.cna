@@ -737,6 +737,48 @@ sub setupUseRWX{
 	return $temp_beacon_dll;
 }
 
+
+sub setExportDllName{
+	local('$beacon_dll %pemap $module_x64 $ExportDllName');
+	local('$dllString $Byte $index $x @ExportName_Location_A $ExportName_Location');
+	$beacon_dll    = $1;
+	%pemap         = $2;
+	$ExportDllName = $3;
+	
+	@ExportName_Location_A   = values(%pemap, @("Export.Name.<location>"));
+	$ExportName_Location     = @ExportName_Location_A[0];
+
+	$beacon_dll = pe_set_stringz($beacon_dll, $ExportName_Location, $ExportDllName);
+	# Check that the string was written
+	$dllString    = getStringFromOffset($beacon_dll, $ExportName_Location);
+	println("[+] DLL name in Export Directory changed to : ".$dllString);
+	return $beacon_dll;
+}
+
+
+sub setChecksum{
+	local('%pemap $temp_beacon_dll $Checksum_location ');
+	local('$checksum @OptionalHeader_location_A $OptionalHeader_location');
+
+	$temp_beacon_dll  = $1;
+	%pemap            = $2;
+	$checksum         = $3;
+
+	# OptionalHeader + 0x40 = OptionalHeader.Checksum
+	@OptionalHeader_location_A  = values(%pemap, @("header.Optional.<location>"));
+	$OptionalHeader_location       = @OptionalHeader_location_A[0];
+	# DWORD       CheckSum;
+	$Checksum_location = $OptionalHeader_location + 0x40;
+	println("[+] OptionalHeader.Checksum location 0x".uc(formatNumber($Checksum_location, 16)));
+	if ($checksum != 0){
+		$temp_beacon_dll = pe_set_long($temp_beacon_dll,$Checksum_location,$checksum);
+	}else{
+		$temp_beacon_dll = pe_set_long($temp_beacon_dll,$Checksum_location,0);
+	}
+
+	return $temp_beacon_dll;
+}
+
 sub generate_my_dll {
 	
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
@@ -808,10 +850,33 @@ sub generate_my_dll {
 	println("|__ compile_time     : ".$compile_time);
 	println("|__ name             : ".$DLL_name);
 
-	#my_dump_my_pe($temp_dll);
-	%pemap = pedump($temp_dll);
 
-	# Zero out the Export Directory - working. Uncomment to use.
+	## Set compile time from C2 profile 
+	# Disabled for now. Need to test stability more.
+	#$temp_dll = pe_set_compile_time_with_string($temp_dll, $compile_time);
+
+	## handle rich_pe_header from C2 profile
+	# These rich_header options change the position of the File_Header and Optional_Header
+	# %pemap before and after these commands will be different. Don't rely on old %pemap values for mods.
+	# Disabled for now. Need to test stability more.
+	# <DEFAULT> = rich_header if not set in C2 profile
+	#if (($rich_header eq "<DEFAULT>") || ($rich_header eq "")){
+	#	$temp_dll = pe_remove_rich_header($temp_dll);
+	#}else{
+	#	$temp_dll = pe_insert_rich_header($temp_dll, $rich_header);
+	#}
+	
+	## Change Exported name of the Beacon DLL
+	#if ($DLL_name ne ""){
+	#	$temp_dll = setExportDllName($temp_dll,%pemap,$DLL_name);
+	#}
+
+	# Now we should be good with optional_header values in the %pemap
+	my_dump_my_pe($temp_dll);
+	%pemap = pedump($temp_dll);	
+
+	## Zero out the Export Directory 
+	#  working. Uncomment to use.
 	#$temp_dll = nullExportDirectory($temp_dll);
 
 	# Handle useRWX 
