@@ -2,13 +2,15 @@
 A proof-of-concept [Cobalt Strike](https://www.cobaltstrike.com/) Reflective Loader which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
 
 ## UDRL Usage Considerations
-The built-in Cobalt Strike reflective loader is robust,  handling all [Malleable PE evasion features](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm) Cobalt Strike has to offer. The major disadvantage to using a [custom User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) is Malleable PE evasion features may or may not be supported out-of-the-box.
-The objective of the public BokuLoader project is to function as a blueprint for red teams seeking to create their own in-house Cobalt Strike UDRL. The project aims to support all worthwhile CS Malleable PE evasion features. Some evasion features leverage CS integration, others have been recreated completely, and some are unsupported. Before using this project operationally, in any form, you should properly test the evasion features are working as intended. Between the C code and the Aggressor script, compilation with different versions of operating systems, compilers, and Java may  return different results.
+The built-in Cobalt Strike reflective loader is robust,  handling all [Malleable PE evasion features](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm) Cobalt Strike has to offer. The major disadvantage to using a [custom User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) is Malleable PE evasion features may or may not be supported out-of-the-box.  
 
-## Current Goal:
-+ Integrate with CS to handle malleable PE C2 profile options, or recreate the malleable PE options within BokuLoader.
+The objective of the public BokuLoader project is to function as a blueprint for red teams seeking to create their own in-house Cobalt Strike UDRL. The project aims to support all worthwhile CS Malleable PE evasion features. Some evasion features leverage CS integration, others have been recreated completely, and some are unsupported.   
 
-### Contributors: [Bobby Cooke @0xBoku](https://twitter.com/0xBoku) & [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
+_Before using this project, in any form, you should properly test the evasion features are working as intended. Between the C code and the Aggressor script, compilation with different versions of operating systems, compilers, and Java may  return different results._   
+
+#### Contributors: 
++ [Bobby Cooke @0xBoku](https://twitter.com/0xBoku)
++ [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
 
 ## Features
 + Supports all allocator methods via C2 profile 
