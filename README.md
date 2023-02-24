@@ -30,6 +30,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 - 100k UDRL Size
 
 ### Supported Malleable PE Evasion Features
+### Supported Malleable PE Evasion Features
 |Command|Option(s)|Supported|
 |--|--|--|
 |`allocator`|HeapAlloc, MapViewOfFile, VirtualAlloc | All supported via BokuLoader implementation|
@@ -37,19 +38,20 @@ _Before using this project, in any form, you should properly test the evasion fe
 |`obfuscate`|true/false|Supported via BokuLoader implementation
 |`entry_point`|RVA as decimal number|Supported via BokuLoader implementation
 |`cleanup`|true|Supported via CS integration
-|`userwx`|true/false|Command is ignored. BokuLoader uses `RX`/`RW` for all allocator methods (`userwx "false"`)
+|`userwx`|true/false|Supported via BokuLoader implementation
 |`sleep_mask`|(true/false) or (Sleepmask Kit+true)|Supported. When using default "sleepmask true" (without sleepmask kit) set "userwx true". When using sleepmask kit which supports RX beacon.text memory (`src47/Ekko`) set "sleepmask true" && "userwx false".
 |`magic_mz_x64`|4 char string|`BokuLoader.cna` Aggressor script modification
 |`magic_pe`|2 char string|`BokuLoader.cna` Aggressor script modification
 |`transform-x64 prepend`|escaped hex string|`BokuLoader.cna` Aggressor script modification
 |`transform-x64 strrep`|string string|`BokuLoader.cna` Aggressor script modification
 |`stomppe`|true/false|Unsupported. BokuLoader does not copy beacon DLL headers over. First `0x1000` bytes of virtual beacon DLL are `0x00`
-|`checksum`|number|Unsupported
-|`compile_time`|date-time string|Unsupported
+|`checksum`|number|Experimental. `BokuLoader.cna` Aggressor script modification
+|`compile_time`|date-time string|Experimental. `BokuLoader.cna` Aggressor script modification
 |`image_size_x64`|decimal value|Unsupported
-|`name`|string|Unsupported
-|`rich_header`|escaped hex string|Unsupported
+|`name`|string|Experimental. `BokuLoader.cna` Aggressor script modification
+|`rich_header`|escaped hex string|Experimental. `BokuLoader.cna` Aggressor script modification
 |`stringw`|string|Unsupported
+|`string`|string|Unsupported
 |`string`|string|Unsupported
 
 
