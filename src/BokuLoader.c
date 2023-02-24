@@ -103,7 +103,7 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // The DLL is being loaded into the virtual address space of the current process. 
     // DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
     // https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain
-    // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then it beacon will return to us.
+    // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then beacon will return to us.
     ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
     return rdll_dst.EntryPoint;
 }
@@ -392,7 +392,7 @@ void doRelocations(APIS * api, Dll * rdll_dst, Dll * rdll_src){
         : "r" (RelocDir)      // RAX IN
     );
 
-    if(RelocDirSize && BaseAddressDelta) // check if their are any relocations present
+    if(RelocDirSize && BaseAddressDelta) // check if relocations present
     {
         __asm__(
             "xor rcx, rcx \n"
