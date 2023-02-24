@@ -365,74 +365,96 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
         );
     }
 }
-
 void doRelocations(APIS * api, Dll * rdll_dst, Dll * rdll_src){
-    unsigned __int64 beacon_image_base    = 0;
-    unsigned __int64 BaseAddressDelta     = 0;
-    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
-    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
-    PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
-    DWORD    BaseRelocationTable_RVA       = 0;
-    DWORD    BaseRelocationTable_Size      = 0;
-    void*    BaseRelocationTable           = 0;
-    PIMAGE_BASE_RELOCATION this_RelocBlock = NULL;
-    PIMAGE_BASE_RELOCATION this_BaseRelocation = NULL;
-    DWORD this_BaseRelocation_VA = 0;
-    DWORD this_BaseRelocation_SizeOfBlock = 0;
-    DWORD this_relocation_RVA = 0;
-    unsigned short* this_relocation = NULL;
-    void* this_relocation_VA = NULL;
-    DWORD this_relocBlock_EntriesCount = 0;
-     
-    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)rdll_src->dllBase;
-    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
-    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
-    beacon_image_base               = (unsigned __int64)raw_beacon_dll_OPTIONAL_HEADER->ImageBase;
-    BaseAddressDelta                = (unsigned __int64)((char*)rdll_dst->dllBase - beacon_image_base);
+    void* nextRelocBlock, *RelocDirSize, *BaseAddressDelta, *relocBlockSize, *relocVA, *RelocBlockEntries, *nextRelocBlockEntry;
+    __asm__(
+        "add rdx, 0x18 \n"  // OptionalHeader.ImageBase
+        "mov rdx, [rdx] \n"
+        "sub rax, rdx \n"   // dllBase.ImageBase
+        : "=r" (BaseAddressDelta)       // RAX OUT
+        : "r" (rdll_dst->dllBase),       // RAX IN
+          "r" (rdll_src->OptionalHeader) // RDX IN
+    );
+    void* RelocDir = rdll_src->OptionalHeader + 0x98; // OptionalHeader+0x98 = &DataDirectory[Base Relocation Table]
+    __asm__(
+        "xor rcx, rcx \n"
+        "mov ecx, [rdx] \n" // 4 byte unsigned long Virtual Address of the Relocation Directory table
+        "add rax, rcx \n"   // newRelocationTableAddr = dllBase + RVAnewRelocationTable
+        : "=r" (nextRelocBlock)   // RAX OUT
+        : "r" (rdll_dst->dllBase), // RAX IN
+          "r" (RelocDir)          // RDX IN
+    );
+    __asm__(
+        "xor rcx, rcx \n"
+        "mov ecx, [rax+0x4] \n" // 4 byte unsigned long Size of the Relocation Directory table
+        "xchg rax, rcx \n"
+        : "=r" (RelocDirSize) // RAX OUT
+        : "r" (RelocDir)      // RAX IN
+    );
 
-    raw_beacon_dll_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_dll_OPTIONAL_HEADER->DataDirectory;
-
-    BaseRelocationTable_RVA   = raw_beacon_dll_data_directory[5].VirtualAddress;
-    BaseRelocationTable_Size  = raw_beacon_dll_data_directory[5].Size;
-    
-    BaseRelocationTable       = (void*)((char*)rdll_dst->dllBase + BaseRelocationTable_RVA);
-    this_BaseRelocation = (PIMAGE_BASE_RELOCATION)BaseRelocationTable;
-    this_BaseRelocation_VA               = this_BaseRelocation->VirtualAddress;
-    this_BaseRelocation_SizeOfBlock      = this_BaseRelocation->SizeOfBlock;
-
-    while(this_BaseRelocation->VirtualAddress != 0){
-        this_relocation                  = (unsigned short*)((char*)this_BaseRelocation + sizeof(IMAGE_BASE_RELOCATION));
-        this_relocation_RVA              = this_BaseRelocation->VirtualAddress;
-        this_BaseRelocation_SizeOfBlock  = this_BaseRelocation->SizeOfBlock;
-        this_relocation_VA               = (void*)((char*)rdll_dst->dllBase + this_relocation_RVA);
-        this_relocBlock_EntriesCount     = (this_BaseRelocation_SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / 2; 
-    
-        while( this_relocBlock_EntriesCount-- )
+    if(RelocDirSize && BaseAddressDelta) // check if their are any relocations present
+    {
+        __asm__(
+            "xor rcx, rcx \n"
+            "mov ecx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
+            "xchg rax, rcx \n"
+            : "=r" (relocBlockSize) // RAX OUT
+            : "r" (nextRelocBlock)  // RAX IN
+        );
+        while(relocBlockSize)
         {
             __asm__(
-                "mov r9d, [rax] \n"  // 2 byte value for the Relocation Entry (with the 4 bit type and 12 bit offset)
-                "mov rax, r9 \n"
-                "shr r9, 0x0C \n"    // Check the 4 bit type
-                "cmp r9b, 0x0A \n"   // IMAGE_REL_BASED_DIR64?
-                "jne badtype \n"
-                "shl rax, 0x34 \n"   // only keep the last 12 bits of RAX by shaking the RAX register
-                "shr rax, 0x34 \n"   // the last 12 bits is the offset, the first 4 bits is the type
-                "add rdx, rax \n"    // in memory Virtual Address of our current relocation entry
-                "mov r10, [rdx] \n"  // value of the relocation entry
-                "add r10, rcx \n"    // value of our relocation entry + the hardcoded Addr:Our Real in memory VA delta we calculated earlier
-                "mov [rdx], r10 \n"  // WRITE THAT RELOC!
-                "badtype:\n"
-                : // no outputs
-                : "r" (this_relocation),     // RAX IN
-                  "r" (this_relocation_VA),  // RDX IN
-                  "r" (BaseAddressDelta)     // RCX IN
+                "xor rcx, rcx \n"
+                "mov ecx, [rdx] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->VirtualAddress
+                "add rax, rcx \n"   // &reflectiveDll.dll + nextRelocationBlockRVA = VA of next Relocation Block
+                : "=r" (relocVA)          // RAX OUT
+                : "r" (rdll_dst->dllBase), // RAX IN
+                  "r" (nextRelocBlock)    // RDX IN
             );
-            this_relocation = (unsigned short*)((char*)this_relocation + sizeof(unsigned short));
+            __asm__(
+                "xor rdx, rdx \n"
+                "mov rcx, 0x2 \n" // 0x2 = size of image relocation WORD
+                "sub ax, 0x8 \n"  // Minus the 8 byte IMAGE_BASE_RELOCATION structure which tells us the RVA for the block and the blocksize
+                "div cx \n"       // relocBlockSize/2
+                : "=r" (RelocBlockEntries) // RAX OUT
+                : "r" (relocBlockSize)     // RAX IN
+            );
+            nextRelocBlockEntry = nextRelocBlock + 0x8;
+            while( RelocBlockEntries-- )
+            {
+                __asm__(
+                    "push rbx \n"
+                    "xor rbx, rbx \n"
+                    "mov bx, [rax] \n"  // 2 byte value for the Relocation Entry (with the 4 bit type and 12 bit offset)
+                    "mov rax, rbx \n"
+                    "shr rbx, 0x0C \n"  // Check the 4 bit type
+                    "cmp bl, 0x0A \n"   // IMAGE_REL_BASED_DIR64?
+                    "jne badtype \n"
+                    "shl rax, 0x34 \n"  // only keep the last 12 bits of RAX by shaking the RAX register
+                    "shr rax, 0x34 \n"  // the last 12 bits is the offset, the first 4 bits is the type
+                    "add rdx, rax \n"   // in memory Virtual Address of our current relocation entry
+                    "mov rbx, [rdx] \n" // value of the relocation entry
+                    "add rbx, rcx \n"   // value of our relocation entry + the hardcoded Addr:Our Real in memory VA delta we calculated earlier
+                    "mov [rdx], rbx \n" // WRITE THAT RELOC!
+                    "badtype:\n"
+                    "pop rbx \n"
+                    : // no outputs
+                    : "r" (nextRelocBlockEntry), // RAX IN
+                      "r" (relocVA),             // RDX IN
+                      "r" (BaseAddressDelta)     // RCX IN
+                );
+                nextRelocBlockEntry += 0x2;
+            }
+            nextRelocBlock = add(nextRelocBlock, relocBlockSize);
+            __asm__(
+                "xor rcx, rcx \n"
+                "mov ecx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
+                "xchg rax, rcx \n"
+                : "=r" (relocBlockSize) // RAX OUT
+                : "r" (nextRelocBlock)  // RAX IN
+            );
         }
-        this_BaseRelocation = ((char*)this_BaseRelocation + this_BaseRelocation->SizeOfBlock);
     }
-
 }
 
 void parseDLL(Dll * dll){
