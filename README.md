@@ -12,31 +12,45 @@ _Before using this project, in any form, you should properly test the evasion fe
 + [Bobby Cooke @0xBoku](https://twitter.com/0xBoku)
 + [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
 
-## Features
-+ Supports all allocator methods via C2 profile 
-  - `set MapViewOfFile` uses `kernel32.CreateFileMappingA` & `kernel32.MapViewOfFile` 
-  - `set VirtualAlloc` uses direct syscall to `NtAllocateVirtualMemory`
-  - `set HeapAlloc` uses `kernel32.GetProcessHeap` and `ntdll.RtlAllocateHeap`
-  - All memory protection changes are done via direct syscall to `NtProtectVirtualMemory`
-+ Supports DLL Module stomping via C2 profile with `set module_x64`
-  - Uses same IOCs as CS: 
-    - `Kernel32.LoadLibraryEx`
-    - Does not resolve addresses in LDR PEB entry as detailed by [MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
-  - [Same DLL stomping requirements set by CS implementation apply](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm)
-+ Supports `obfuscate "true"` with custom UDRL Aggressor script implementation.
-+ Supports sleepmask kit Ekko implementation
-+ Direct NT Syscalls via HellsGate & HalosGate
-+ PE Header Obfuscation
-+ PE String Replacement
-+ NOHEADERCOPY - Loader will not copy headers raw beacon DLL to virtual beacon DLL. First `0x1000` bytes will be nulls.
-+ NoRWX -  The Reflective loader writes beacon with Read & Write permissions and after resolving Beacons Import Table & Relocations, changes the .TEXT code section of Beacon to Read & Execute permissions 
-+ XGetProcAddress for resolving symbols
-+ 100k UDRL Size
-+ Caesar Cipher for string obfuscation
-+ Prepend ASM Instructions
-+ Supports Malleable C2 profile option `cleanup "true"`
-+ Zero out the export directory.
-+ `set entry_point` supported.
+## Evasion Features
+
+### BokuLoader Specific Evasion Features
+- Custom ASM/C reflective loader code
+- Direct NT syscalls via HellsGate & HalosGate techniques
+  - All memory protection changes for all allocation options are done via direct syscall to `NtProtectVirtualMemory`
+- `obfuscate "true"` with custom UDRL Aggressor script implementation.
+- NOHEADERCOPY 
+  - Loader will not copy headers raw beacon DLL to virtual beacon DLL. First `0x1000` bytes will be nulls.
+- `XGetProcAddress` for resolving symbols
+  - Does not use `Kernel32.GetProcAddress`
+- `xLoadLibrary` for resolving DLL's base address & DLL Loading
+  - For loaded DLLs, gets DLL base address from `TEB->PEB->PEB_LDR_DATA->InMemoryOrderModuleList`
+  - Does not use `Kernel32.LoadLibraryA`
+- Caesar Cipher for string obfuscation
+- 100k UDRL Size
+
+### Supported Malleable PE Evasion Features
+|Command|Option(s)|Supported|
+|--|--|--|
+|`allocator`|HeapAlloc, MapViewOfFile, VirtualAlloc | All supported via BokuLoader implementation|
+|`obfuscate`|true/false|Supported via BokuLoader implementation
+|`entry_point`|RVA as decimal number|Supported via BokuLoader implementation
+|`cleanup`|true|Supported via CS integration
+|`userwx`|true/false|Command is ignored. BokuLoader uses `RX`/`RW` for all allocator methods (`userwx "false"`)
+|`sleep_mask`|true/false or Sleepmask Kit|default sleep_mask true is unsupported. Sleepmask kit capable of handling RW/RX memory works (src47 Ekko)
+|`magic_mz_x64`|4 char string|`BokuLoader.cna` Aggressor script modification
+|`magic_pe`|2 char string|`BokuLoader.cna` Aggressor script modification
+|`transform-x64 prepend`|escaped hex string|`BokuLoader.cna` Aggressor script modification
+|`transform-x64 strrep`|string string|`BokuLoader.cna` Aggressor script modification
+|`stomppe`|true/false|Unsupported. BokuLoader does not copy beacon DLL headers over. First `0x1000` bytes of virtual beacon DLL are `0x00`
+|`checksum`|number|Unsupported
+|`compile_time`|date-time string|Unsupported
+|`image_size_x64`|decimal value|Unsupported
+|`name`|string|Unsupported
+|`rich_header`|escaped hex string|Unsupported
+|`stringw`|string|Unsupported
+|`string`|string|Unsupported
+
 
 ## Test
 + (2/22/23) All 4 allocator methods tested with [threatexpress/malleable-c2/master/jquery-c2.4.7.profile](https://raw.githubusercontent.com/threatexpress/malleable-c2/master/jquery-c2.4.7.profile)
