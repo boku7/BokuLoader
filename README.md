@@ -52,7 +52,6 @@ _Before using this project, in any form, you should properly test the evasion fe
 |`rich_header`|escaped hex string|Experimental. `BokuLoader.cna` Aggressor script modification
 |`stringw`|string|Unsupported
 |`string`|string|Unsupported
-|`string`|string|Unsupported
 
 
 ## Test
@@ -111,7 +110,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 + The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
 
 ### Virtual Beacon DLL Header
-- The first `0x1000` bytes of the virtual beacon DLL is zero'd out.
+- The first `0x1000` bytes of the virtual beacon DLL are zeros.
 
 ### Source Code Available
 + The BokuLoader source code is provided within the repository and can be used to create memory signatures.
