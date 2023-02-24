@@ -784,10 +784,11 @@ sub generate_my_dll {
 		return $null;
 	}
 
-	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
-
-	# Output C2 malleable PE command options to operator
+	# Write bokuloader shellcode to raw beacon dll
 	$temp_dll = setup_reflective_loader($2, $loader);
+	println("[+] Beacon DLL size: 0x".uc(formatNumber(strlen($temp_dll), 16)));
+	
+	# Output C2 malleable PE command options to operator
 	println("[+] Malleable PE options defined in Malleable C2 profile:");
 	println("|__ Obfuscate        : ".$obfuscate);
 	println("|__ sleep_mask       : ".$sleep_mask);
@@ -806,7 +807,7 @@ sub generate_my_dll {
 	println("|__ compile_time     : ".$compile_time);
 	println("|__ name             : ".$DLL_name);
 
-	my_dump_my_pe($temp_dll);
+	#my_dump_my_pe($temp_dll);
 	%pemap = pedump($temp_dll);
 
 	# Zero out the Export Directory - working. Uncomment to use.
