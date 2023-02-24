@@ -43,14 +43,13 @@ _Before using this project, in any form, you should properly test the evasion fe
 |`transform-x64 prepend`|escaped hex string|`BokuLoader.cna` Aggressor script modification
 |`transform-x64 strrep`|string string|`BokuLoader.cna` Aggressor script modification
 |`stomppe`|true/false|Unsupported. BokuLoader does not copy beacon DLL headers over. First `0x1000` bytes of virtual beacon DLL are `0x00`
-|`checksum`|number|Unsupported
-|`compile_time`|date-time string|Unsupported
+|`checksum`|number|Experimental. `BokuLoader.cna` Aggressor script modification
+|`compile_time`|date-time string|Experimental. `BokuLoader.cna` Aggressor script modification
 |`image_size_x64`|decimal value|Unsupported
-|`name`|string|Unsupported
-|`rich_header`|escaped hex string|Unsupported
+|`name`|string|Experimental. `BokuLoader.cna` Aggressor script modification
+|`rich_header`|escaped hex string|Experimental. `BokuLoader.cna` Aggressor script modification
 |`stringw`|string|Unsupported
 |`string`|string|Unsupported
-
 
 ## Test
 + (2/22/23) All 4 allocator methods tested with [threatexpress/malleable-c2/master/jquery-c2.4.7.profile](https://raw.githubusercontent.com/threatexpress/malleable-c2/master/jquery-c2.4.7.profile)
