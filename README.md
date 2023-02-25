@@ -30,7 +30,6 @@ _Before using this project, in any form, you should properly test the evasion fe
 - 100k UDRL Size
 
 ### Supported Malleable PE Evasion Features
-### Supported Malleable PE Evasion Features
 |Command|Option(s)|Supported|
 |--|--|--|
 |`allocator`|HeapAlloc, MapViewOfFile, VirtualAlloc | All supported via BokuLoader implementation|
