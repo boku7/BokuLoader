@@ -34,7 +34,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 |--|--|--|
 |`allocator`|HeapAlloc, MapViewOfFile, VirtualAlloc | All supported via BokuLoader implementation|
 |`module_x64`| string (DLL Name) | Supported via BokuLoader implementation. [Same DLL stomping requirements as CS implementation apply](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm)
-|`obfuscate`|true/false|HTTP/S beacons supported via BokuLoader implementation. SMB/TCP is currently not supported for obfuscate true.
+|`obfuscate`|true/false|HTTP/S beacons supported via BokuLoader implementation. SMB/TCP is currently not supported for obfuscate true. Details in issue. Accepting help if you can fix :) 
 |`entry_point`|RVA as decimal number|Supported via BokuLoader implementation
 |`cleanup`|true|Supported via CS integration
 |`userwx`|true/false|Supported via BokuLoader implementation
