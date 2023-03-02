@@ -2,9 +2,11 @@
 A proof-of-concept [User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
 
 #### Contributors: 
-+ [Bobby Cooke @0xBoku](https://twitter.com/0xBoku)
-+ [Santiago Pecin @s4ntiago_p](https://twitter.com/s4ntiago_p) 
-+ [Chris Spehn @ConsciousHacker](https://twitter.com/ConsciousHacker)
+|Contributor|Twitter|Notable Contributions|
+|--|--|--|
+|Bobby Cooke|[@0xBoku](https://twitter.com/0xBoku)|Project original author and maintainer| 
+|Santiago Pecin|[@s4ntiago_p](https://twitter.com/s4ntiago_p)|Reflective Loader major enhancements|
+|Chris Spehn|[@ConsciousHacker](https://twitter.com/ConsciousHacker)|Aggressor scripting|
 
 ## UDRL Usage Considerations
 The built-in [Cobalt Strike](https://www.cobaltstrike.com/) reflective loader is robust,  handling all [Malleable PE evasion features](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm) Cobalt Strike has to offer. The major disadvantage to using a custom UDRL is Malleable PE evasion features may or may not be supported out-of-the-box.  
