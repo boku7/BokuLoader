@@ -139,6 +139,8 @@ _Before using this project, in any form, you should properly test the evasion fe
   + Awesome work on this method, really enjoyed working through it myself. Thank you!
   + https://github.com/am0nsec/HellsGate 
   + Link to the [Hell's Gate paper: https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf](https://vxug.fakedoma.in/papers/VXUG/Exclusive/HellsGate.pdf)
+### Aggressor Scripting
++ [sinusoid @the_bit_diddler](https://twitter.com/the_bit_diddler) : [returnIntegerFromArray](https://gist.github.com/EspressoCake/612c8fa45e6d608ec0811ef747cf1db7)
 ### Cobalt Strike User Defined Reflective Loader
 + https://www.cobaltstrike.com/help-user-defined-reflective-loader
 ### Great Resource for learning Intel ASM
