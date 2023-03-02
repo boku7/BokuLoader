@@ -45,7 +45,6 @@ bind Ctrl+1 {
 	return;
 }
 
-# https://gist.github.com/EspressoCake/612c8fa45e6d608ec0811ef747cf1db7
 sub array2Int {
     local('@cArray $cVal $cIndex');
     $cVal = 0;
@@ -491,6 +490,35 @@ sub setupAllocatorMethod {
 }
 
 
+# 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
+sub setup_obfuscate_xor_key {
+	local('$beacon_dll $allocator $module_x64 $allocator_code $allocator_code_offset');
+	local('@Bytes $Byte $index $x $modstrchk');
+	$beacon_dll = $1;
+	$obfuscate  = $2;
+	$xor_key    = $3;
+	# Write XOR Key to OEM Identifier at DOS Header+0x24 
+	$offset     = 36; 
+	$flag       = 0;
+
+	
+	if ($obfuscate eq "true") {
+		$flag = 1;
+		println("|_ Writing 0x".uc(formatNumber($xor_key, 16))." xor flag+key at beacon.dll+0x24 (OEM Identifier)");
+		println("|_ xor_key 0x".uc(formatNumber($xor_key, 16)));
+	}else {
+		$flag = 0;
+		$xor_key = 0;
+	}
+	$xor_key = ($xor_key << 8) + ($flag & 0xFF);
+
+	println("|_ Obfuscate + flag short 0x".uc(formatNumber($xor_key, 16)));
+	$beacon_dll = pe_set_short($beacon_dll, $offset, $xor_key);
+
+	return $beacon_dll;
+}
+
+
 # Sets NULLs (0x00) at a location in PE
 # Arg1 = BeaconBytes ; Arg2 = Offset ; Arg3 = Size to Zero-out
 sub setNulls{
@@ -545,7 +573,7 @@ sub nullExportDirectory{
 }
 
 sub printByteDump{
-	local('$beacon_dll $size $offset $index $Byte @Bytes @BytesRow $rowIndex $row');
+	local('$beacon_dll $size @Bytes_raw_row $offset $index $Byte @Bytes_raw @Bytes_hex @BytesRow $rowIndex $row');
 	$beacon_dll = $1;
 	$size       = $2;
 	$offset     = $3;
@@ -555,27 +583,44 @@ sub printByteDump{
 
 	#println("[+] Printing 0x".uc(formatNumber($size, 16))." bytes starting at offset 0x".uc(formatNumber($offset, 16)));
 
-	for ($x = 0; $x < $size; $x++) {
-		$index = $offset;
-		$index += $x;
-		$Byte = byteAt($beacon_dll, $index);
-		@Bytes[$x] = uc(formatNumber($Byte, 16));
-		if ((($x % 16) == 0) && ($x != 0)){
-			#println("x equals $x");
+	for ($x = 0; $x < $size; $x++) 
+	{
+		$index     = $offset;
+		$index    += $x;
+		$Byte      = byteAt($beacon_dll, $index);
+		@Bytes_raw[$x] = $Byte;
+		@Bytes_hex[$x] = uc(formatNumber($Byte, 16));
+		# Print the row 
+		if ((($x % 16) == 0) && ($x != 0))
+		{
+			@Bytes_raw_row =  @(0);
+			clear(@Bytes_raw_row);
 			$rowIndex = 0;
-			$row = ($offset + $x) - 16;
-			print("0x".uc(formatNumber($row, 16))."    ");
-			for ($y = 0; $y < 16; $y++){
+			$row      = ($offset + $x) - 16;
+			# Print the position to the left 
+			if ($row == 0)
+			{
+				print("0x00    ");
+			}else
+			{
+				print("0x".uc(formatNumber($row, 16))."    ");
+			}
+			# Print out 16 hex bytes on a line
+			for ($y = 0; $y < 16; $y++)
+			{
 				#println("y equals $y");
 				$rowIndex = ($x - 16) + $y;
 				#println("rowIndex equals $rowIndex");
-				$length = strlen(@Bytes[$rowIndex]);
-				if ($length == 1){
-					@Bytes[$rowIndex] = "0".@Bytes[$rowIndex];
+				# Make sure if hex byte starts with a 0 that it is printed
+				$length = strlen(@Bytes_hex[$rowIndex]);
+				if ($length == 1)
+				{
+					print("0");
 				}
-				@BytesRow[$y] = @Bytes[$rowIndex];
-				print(@Bytes[$rowIndex]." ");
-				if ($y == 15){
+				print(@Bytes_hex[$rowIndex]." ");
+				if ($y == 15)
+				{
+					print(@Bytes_raw_row);
 					println();
 				}
 			}
@@ -790,11 +835,12 @@ sub setChecksum{
 }
 
 sub boku_pe_customPE{
-	local('$PEval');
-	$temp_dll = $1;
-	$PEval = 0xACDC;
+	local('$PE_value $temp_dll $$PE_location');
+	$temp_dll    = $1;
+	$PE_value    = $2;
+	$PE_location = $3;
 
-	$temp_dll = pe_set_short($temp_dll, 0x80, $PEval);
+	$temp_dll    = pe_set_short($temp_dll, $PE_location, $PE_value);
 	return $temp_dll;
 }
 
@@ -806,6 +852,34 @@ sub boku_pe_customMZ{
 
 	$temp_dll = pe_set_long($temp_dll, 0, $MZval);
 	return $temp_dll;
+}
+
+sub boku_pe_MZ_from_C2Profile{
+	$temp_beacon_dll  = $1;
+	$magic_mz         = $2;
+
+	$mz_len           = strlen($magic_mz);
+	if ($magic_mz ne ""){
+		if ($mz_len != 4)
+		{
+			warn("Error: MZ value must be 4 chars of nop instructions! MZ header modification not applied.")
+		}else
+		{
+			$temp_dll = pe_set_string($temp_dll, 0, $magic_mz);
+			for ($x = 0; $x < $mz_len; $x++)
+			{
+				@mz_4b_array[$x] = byteAt($magic_mz, $x);
+			}
+			println("[+] Check that the first 4 byte char of nops from C2 profile are correct: ");
+			print("CHECK > ");
+			for ($x = 0; $x < $mz_len; $x++)
+			{
+				print(uc(formatNumber(@mz_4b_array[$x], 16))." ");
+			}
+			println("");
+			printByteDump($temp_dll,18,0);
+		}
+	}
 }
 
 sub generate_my_dll {
@@ -904,7 +978,7 @@ sub generate_my_dll {
 	#}
 	
 	# Now we should be good with optional_header values in the %pemap
-	#my_dump_my_pe($temp_dll);
+	my_dump_my_pe($temp_dll);
 	%pemap = pedump($temp_dll);
 	
 	## Set compile time from C2 profile 
@@ -936,8 +1010,9 @@ sub generate_my_dll {
 	# setup virtual beacon dll allocator. DLL stomp, heap alloc, virtual alloc, mapped
 	$temp_dll = setupAllocatorMethod($temp_dll,$allocator,$module_x64);
 
+	$xorKey = 0xBC;
+	$temp_dll = setup_obfuscate_xor_key($temp_dll,$obfuscate,$xorKey);
 	if ($obfuscate eq "true") {
-		$xorKey = 0xC3;
 		println("## Obfuscating section names, DLL import names, and DLL import entry names with XOR key: ".uc(formatNumber($xorKey, 16)));
 		$temp_dll = boku_pe_mask_ImportStrings($temp_dll, $xorKey, $isPivot);
 		if (strlen($temp_dll) eq 0) {
@@ -956,11 +1031,56 @@ sub generate_my_dll {
 	$temp_dll = boku_strrep($temp_dll);
 #	$temp_dll = prependBytes($temp_dll);
 
-#	if ($magic_mz ne ""){
-#		$temp_dll = pe_set_string($temp_dll, 0, $magic_mz);
-#	}
-
-
+	# MZ Header
+	println("[+] Attempting to modify MZ header to 4 byte char of nops from C2 profile: ".$magic_mz);
+	if ($magic_mz ne ""){
+		$mz_len = strlen($magic_mz);
+		if ($mz_len != 4)
+		{
+			warn("Error: MZ value must be 4 chars of nop instructions! MZ header modification not applied.")
+		}else
+		{
+			$temp_dll = pe_set_string($temp_dll, 0, $magic_mz);
+			for ($x = 0; $x < $mz_len; $x++)
+			{
+				@mz_4b_array[$x] = byteAt($magic_mz, $x);
+			}
+			println("[+] Check that the first 4 byte char of nops from C2 profile are correct: ");
+			print("CHECK > ");
+			for ($x = 0; $x < $mz_len; $x++)
+			{
+				print(uc(formatNumber(@mz_4b_array[$x], 16))." ");
+			}
+			println("");
+			printByteDump($temp_dll,18,0);
+		}
+	}
+	# PE Bytes
+	println("[+] Attempting to modify PE bytes to 2 byte char of nops from C2 profile: ".$magic_pe);
+	if ($magic_pe ne ""){
+		$pe_len = strlen($magic_pe);
+		if ($pe_len != 2)
+		{
+			warn("Error: PE value must be 2 chars! PE bytes modification not applied.")
+		}else
+		{
+			@pebytes_location_A    = values(%pemap, @("e_lfanew.<value>"));
+			$pebytes_location      = @pebytes_location_A[0];
+			$temp_dll              = pe_set_string($temp_dll, $pebytes_location, $magic_pe);
+			for ($x = 0; $x < $pe_len; $x++)
+			{
+				@pe_2b_array[$x] = byteAt($magic_pe, $x);
+			}
+			println("[+] Check that the 2 bytes at offset ".uc(formatNumber($pebytes_location, 16))." char of nops from C2 profile are correct: ");
+			print("CHECK >  ");
+			for ($x = 0; $x < $pe_len; $x++)
+			{
+				print(uc(formatNumber(@pe_2b_array[$x], 16))." ");
+			}
+			println("");
+			printByteDump($temp_dll,18,$pebytes_location);
+		}
+	}
 	return $temp_dll;
 }
 
