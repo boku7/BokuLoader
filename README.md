@@ -1,5 +1,5 @@
 # BokuLoader : Cobalt Strike Reflective Loader
-A proof-of-concept [User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) which aims to recreate, integrate, and enhance Cobalt Strike's evasion features for x64 HTTP/S beacons!
+A proof-of-concept [User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
 
 #### Contributors: 
 + [Bobby Cooke @0xBoku](https://twitter.com/0xBoku)
@@ -40,8 +40,8 @@ _Before using this project, in any form, you should properly test the evasion fe
 |`cleanup`|true|Supported via CS integration
 |`userwx`|true/false|Supported via BokuLoader implementation
 |`sleep_mask`|(true/false) or (Sleepmask Kit+true)|Supported. When using default "sleepmask true" (without sleepmask kit) set "userwx true". When using sleepmask kit which supports RX beacon.text memory (`src47/Ekko`) set "sleepmask true" && "userwx false".
-|`magic_mz_x64`|4 char string|`BokuLoader.cna` Aggressor script modification
-|`magic_pe`|2 char string|`BokuLoader.cna` Aggressor script modification
+|`magic_mz_x64`|4 char string|Supported via CS integration
+|`magic_pe`|2 char string|Supported via CS integration
 |`transform-x64 prepend`|escaped hex string|`BokuLoader.cna` Aggressor script modification
 |`transform-x64 strrep`|string string|`BokuLoader.cna` Aggressor script modification
 |`stomppe`|true/false|Unsupported. BokuLoader does not copy beacon DLL headers over. First `0x1000` bytes of virtual beacon DLL are `0x00`
