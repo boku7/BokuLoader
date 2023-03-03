@@ -45,7 +45,6 @@ bind Ctrl+1 {
 	return;
 }
 
-# https://gist.github.com/EspressoCake/612c8fa45e6d608ec0811ef747cf1db7
 sub array2Int {
     local('@cArray $cVal $cIndex');
     $cVal = 0;
