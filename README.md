@@ -151,6 +151,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 ### Great Resource for learning Intel ASM
 + [Pentester Academy - SLAE64](https://www.pentesteracademy.com/course?id=7)
 ### ETW and AMSI Bypass 
++ [@anthemtotheego](https://twitter.com/anthemtotheego) [inline-ExecuteAssembly](https://github.com/xforcered/InlineExecute-Assembly)
 + @mariuszbit - for awesome idea to implement bypasses in reflective loader!
 + [@_XPN_ Hiding Your .NET – ETW](https://www.mdsec.co.uk/2020/03/hiding-your-net-etw/)
 + [ajpc500/BOFs](https://github.com/ajpc500/BOFs/)
