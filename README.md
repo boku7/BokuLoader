@@ -32,6 +32,7 @@ _Before using this project, in any form, you should properly test the evasion fe
   - Does not use `Kernel32.LoadLibraryA`
 - Caesar Cipher for string obfuscation
 - 100k UDRL Size
+- Import DLL names and import entry name strings are stomped in virtual beacon DLL.
 
 ### Supported Malleable PE Evasion Features
 |Command|Option(s)|Supported|
