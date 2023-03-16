@@ -1,6 +1,6 @@
 # BokuLoader : Cobalt Strike Reflective Loader
 
-![](/bokuloaderbanner.png)
+![](/bokuloader_banner.png)
 
 A proof-of-concept [User-Defined Reflective Loader (UDRL)](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_user-defined-rdll.htm) which aims to recreate, integrate, and enhance Cobalt Strike's evasion features!
 
