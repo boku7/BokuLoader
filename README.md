@@ -23,8 +23,8 @@ _Before using this project, in any form, you should properly test the evasion fe
 
 ### BokuLoader Specific Evasion Features
 - Custom ASM/C reflective loader code
-- Direct NT syscalls via HellsGate & HalosGate techniques
-  - All memory protection changes for all allocation options are done via direct syscall to `NtProtectVirtualMemory`
+- Indirect NT syscalls via HellsGate & HalosGate techniques
+  - All memory protection changes for all allocation options are done via indirect syscall to `NtProtectVirtualMemory`
 - `obfuscate "true"` with custom UDRL Aggressor script implementation.
 - NOHEADERCOPY 
   - Loader will not copy headers raw beacon DLL to virtual beacon DLL. First `0x1000` bytes will be nulls.
