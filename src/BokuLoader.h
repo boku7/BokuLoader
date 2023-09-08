@@ -314,7 +314,7 @@ void  HellDescent(void);
 unsigned long halosGateDown(void * ntdllApiAddr, unsigned long index);
 unsigned long halosGateUp(void * ntdllApiAddr, unsigned long index);
 unsigned long getSyscallNumber(void * functionAddress);
-void parseDLL(Dll * dll);
+void parseDLL(Dll * dll, BOOL isImg);
 SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T MaximumAllowed );
 SIZE_T StringLengthA(LPCSTR String);
 
