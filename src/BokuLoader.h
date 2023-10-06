@@ -308,8 +308,9 @@ void *   getRip(void);
 unsigned int copyWithDelimiter(void * dst, void * src, unsigned int n, CHAR delimiter);
 void xorc(unsigned __int64 length, unsigned char * buff, unsigned char maskkey);
 
+void  GetSyscallAddress(void * ntdllApiAddr);
 unsigned long findSyscallNumber(void * ntdllApiAddr);
-unsigned long HellsGate(unsigned long wSystemCall);
+unsigned long HellsGate(unsigned long wSystemCall, void * ntdllApiAddr);
 void  HellDescent(void);
 unsigned long halosGateDown(void * ntdllApiAddr, unsigned long index);
 unsigned long halosGateUp(void * ntdllApiAddr, unsigned long index);

@@ -23,8 +23,8 @@ _Before using this project, in any form, you should properly test the evasion fe
 
 ### BokuLoader Specific Evasion Features
 - Custom ASM/C reflective loader code
-- Direct NT syscalls via HellsGate & HalosGate techniques
-  - All memory protection changes for all allocation options are done via direct syscall to `NtProtectVirtualMemory`
+- Indirect NT syscalls via HellsGate & HalosGate techniques
+  - All memory protection changes for all allocation options are done via indirect syscall to `NtProtectVirtualMemory`
 - `obfuscate "true"` with custom UDRL Aggressor script implementation.
 - NOHEADERCOPY 
   - Loader will not copy headers raw beacon DLL to virtual beacon DLL. First `0x1000` bytes will be nulls.
@@ -109,12 +109,12 @@ _Before using this project, in any form, you should properly test the evasion fe
 ### Sleepmask Detection
 - If sleepmask kit is used, there exists detection methods for this independent memory allocation [as detailed by MDSec here](https://www.mdsec.co.uk/2022/07/part-2-how-i-met-your-beacon-cobalt-strike/)
 
-### Direct Syscalls
-+ BokuLoader calls the following NT systemcalls to setup the loaded executable beacon memory: `NtAllocateVirtualMemory`, `NtProtectVirtualMemory`, `NtFreeVirtualMemory`
-+ These are called directly from the BokuLoader executable memory. These system calls are not backed by NTDLL memory.
+### Indirect Syscalls
++ BokuLoader calls the following NT systemcalls to setup the loaded executable beacon memory: `NtAllocateVirtualMemory`, `NtProtectVirtualMemory`
++ These are called indirectly from the BokuLoader executable memory.
 + Setting userland hooks in `ntdll.dll` will not detect these systemcalls.
-+ It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage when they are not called from `ntdll.dll`.
-+ The BokuLoader itself will contain the `mov eax, r11d; syscall; ret` assembly instructions within its executable memory.
++ It may be possible to register kernelcallbacks using a kernel driver to monitor for the above system calls and detect their usage.
++ The BokuLoader itself will contain the `mov eax, r11d; mov r11, r10; mov r10, rcx; jmp r11` assembly instructions within its executable memory.
 
 ### Virtual Beacon DLL Header
 - The first `0x1000` bytes of the virtual beacon DLL are zeros.
