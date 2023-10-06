@@ -128,6 +128,13 @@ _Before using this project, in any form, you should properly test the evasion fe
   
 
 ## Credits / References
+### Reflective Call Stack Spoofing
++ [LoudSunRun: Call stack synthetic frame spoofer with indirect syscalls](https://github.com/susMdT/LoudSunRun)
++ [SilentMoonwalk: PoC Implementation of a fully dynamic call stack spoofer](https://github.com/klezVirus/SilentMoonwalk)
++ [Vulcan Raven: PoC implementation for spoofing arbitrary call stacks when making syscalls](https://github.com/WithSecureLabs/CallStackSpoofer)
++ [CallStackMasker: A PoC implementation for dynamically masking call stacks with timers](https://github.com/Cobalt-Strike/CallStackMasker)
++ [ThreadStackSpoofer: Thread Stack Spoofing PoC](https://github.com/mgeeky/ThreadStackSpoofer)
++ [Behind the Mask: Spoofing Call Stacks Dynamically with Timers](https://www.cobaltstrike.com/blog/behind-the-mask-spoofing-call-stacks-dynamically-with-timers/)
 ### Reflective Loader
 + https://github.com/stephenfewer/ReflectiveDLLInjection
 + Checkout these videos if you're interested in Reflective DLL:  
