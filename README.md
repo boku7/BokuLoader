@@ -11,6 +11,8 @@ A proof-of-concept [User-Defined Reflective Loader (UDRL)](https://hstechdocs.he
 |Santiago Pecin|[@s4ntiago_p](https://twitter.com/s4ntiago_p)|Reflective Loader major enhancements|
 |Chris Spehn|[@ConsciousHacker](https://twitter.com/ConsciousHacker)|Aggressor scripting|
 |Joshua Magri|[@passthehashbrwn](https://twitter.com/passthehashbrwn)|IAT hooking|
+|Dylan Tran|[@d_tranman](https://twitter.com/d_tranman)|Reflective Call Stack Spoofing|
+|James Yeung|[@5cript1diot](https://twitter.com/5cript1diot)|Indirect System Calls|
 
 ## UDRL Usage Considerations
 The built-in [Cobalt Strike](https://www.cobaltstrike.com/) reflective loader is robust,  handling all [Malleable PE evasion features](https://hstechdocs.helpsystems.com/manuals/cobaltstrike/current/userguide/content/topics/malleable-c2-extend_pe-memory-indicators.htm) Cobalt Strike has to offer. The major disadvantage to using a custom UDRL is Malleable PE evasion features may or may not be supported out-of-the-box.  
@@ -22,6 +24,7 @@ _Before using this project, in any form, you should properly test the evasion fe
 ## Evasion Features
 
 ### BokuLoader Specific Evasion Features
+- Reflective callstack spoofing via synthetic frames.
 - Custom ASM/C reflective loader code
 - Indirect NT syscalls via HellsGate & HalosGate techniques
   - All memory protection changes for all allocation options are done via indirect syscall to `NtProtectVirtualMemory`
