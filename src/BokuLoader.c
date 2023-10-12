@@ -1148,12 +1148,12 @@ void setup_synthetic_callstack(Spoof_Struct * spoof_struct)
     spoof_struct->gadget_stack_frame_size  = CalculateFunctionStackSizeWrapper(spoof_struct->gadget_return_address, &api);
 
     // Stack Frame - BaseThreadInitThunk
-    ReturnAddress = (BYTE *)( (BYTE *) BaseThreadInitThunk + 0x14); 
+    ReturnAddress = *(PVOID *)find_api_return_address_on_stack( get_runtime_function_entry_for_api( &k32 , BaseThreadInitThunk ), BaseThreadInitThunk);
     spoof_struct->frame_1_stack_frame_size = CalculateFunctionStackSizeWrapper(ReturnAddress, &api);
     spoof_struct->frame_1_return_address   = ReturnAddress;
 
     // Stack Frame - RtlUserThreadStart
-    ReturnAddress = (BYTE *)( (BYTE *) RtlUserThreadStart + 0x21);
+    ReturnAddress = *(PVOID *)find_api_return_address_on_stack( get_runtime_function_entry_for_api( &ntdll , RtlUserThreadStart ), RtlUserThreadStart);
     spoof_struct->frame_0_stack_frame_size = CalculateFunctionStackSizeWrapper(ReturnAddress, &api);
     spoof_struct->frame_0_return_address   = ReturnAddress;
 };
